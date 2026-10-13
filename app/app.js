@@ -112,7 +112,7 @@
       erase: "Borrar",
       range: "Monto entre {min} y {max}.",
       paidTo: "Pagaste a",
-      opNumber: "N° de operación",
+      opNumber: "N° de operación", time: "Hora",
       opShort: "Op.",
       date: "Fecha",
       preparing: "Conectando de forma segura…",
@@ -203,7 +203,7 @@
       erase: "Delete",
       range: "Amount between {min} and {max}.",
       paidTo: "You paid",
-      opNumber: "Operation no.",
+      opNumber: "Operation no.", time: "Time",
       opShort: "Op.",
       date: "Date",
       preparing: "Connecting securely…",
@@ -585,33 +585,58 @@
   }
 
   function renderPaid(sol, secs, hash) {
-    const when = new Date().toLocaleString(lang === "es" ? "es-PE" : "en-US", { dateStyle: "medium", timeStyle: "short" });
+    const now = new Date(), loc = lang === "es" ? "es-PE" : "en-US";
+    const day = now.toLocaleDateString(loc, { day: "numeric", month: "short", year: "numeric" });
+    const hour = now.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" });
+    const when = day + ", " + hour;
     const opNum = opNumber(hash);
     view().innerHTML = `
-      <section class="receipt">
-        <svg class="check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-15"/></svg>
-        <h2>${t("paidTitle")}</h2>
-        <div class="receipt-amount">${fmtSol(sol)}</div>
-        ${usdRef(sol) ? `<div class="muted small">${usdRef(sol)}</div>` : ""}
-        <p class="muted">${t("paidTo")} <b>${t("shopName")}</b></p>
-        <div class="receipt-rows">
-          <div class="row"><span>${t("opNumber")}</span><b>${opNum}</b></div>
-          <div class="row"><span>${t("date")}</span><b>${esc(when)}</b></div>
+      <section class="voucher">
+        <div class="v-head">
+          <div class="v-brand"><img src="logo-icon.png" alt="" width="30" height="30" /><span>YAFI</span></div>
         </div>
-        <p><span class="badge">⚡ ${t("paidTime", { s: secs })}</span></p>
+        <div class="v-check"><svg class="check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-15"/></svg></div>
+        <div class="v-body">
+          <h2>${t("paidTitle")}</h2>
+          <div class="v-amount"><span class="cur">S/</span>${sol.toFixed(2)}</div>
+          ${usdRef(sol) ? `<div class="muted small">${usdRef(sol)}</div>` : ""}
+          <div class="v-payee">
+            <div class="avatar">🥪</div>
+            <div><span class="muted small">${t("paidTo")}</span><b>${t("shopName")}</b><span class="muted small">${t("shopSub")}</span></div>
+          </div>
+        </div>
+        <div class="v-cut" aria-hidden="true"></div>
+        <div class="v-rows">
+          <div class="row"><span>${t("date")}</span><b>${esc(day)}</b></div>
+          <div class="row"><span>${t("time")}</span><b>${esc(hour)}</b></div>
+          <div class="row"><span>${t("opNumber")}</span><b>${opNum}</b></div>
+        </div>
+        <div class="v-foot">
+          <span class="badge">⚡ ${t("paidTime", { s: secs })}</span>
+          <div class="v-tagline">${t("heroTitle")}</div>
+        </div>
       </section>
-      <button class="btn btn-secondary" id="shareBtn" type="button">${t("share")}</button>
-      <button class="btn btn-primary" id="againBtn" type="button">${t("payAgain")}</button>
+      <button class="btn btn-primary" id="shareBtn" type="button">${t("share")}</button>
+      <button class="btn btn-secondary" id="againBtn" type="button">${t("payAgain")}</button>
       <a class="btn btn-secondary" href="#/rosa">${t("seeRosa")}</a>`;
     document.getElementById("againBtn").addEventListener("click", renderPay);
     playYafiChime();
     say(t("voicePaid"), 900);
-    // Share like any payment app: the phone's own menu (WhatsApp, Gmail, Telegram…), or copy as a fallback
+    // Share like any payment app: the voucher as an image through the phone's own menu
+    // (WhatsApp, Gmail, Telegram…). Drawn now, so the tap opens the menu without delay.
+    const text = t("shareText", { x: fmtSol(sol), op: opNum, when });
+    const image = window.YafiReceipt ? window.YafiReceipt.toBlob({
+      title: t("paidTitle"), amount: fmtSol(sol), payeeLabel: t("paidTo"), payee: t("shopName"), payeeSub: t("shopSub"),
+      rows: [[t("date"), day], [t("time"), hour], [t("opNumber"), opNum]], tagline: t("heroTitle"), demo: t("footer")
+    }).catch(() => null) : Promise.resolve(null);
     document.getElementById("shareBtn").addEventListener("click", async () => {
-      const text = t("shareText", { x: fmtSol(sol), op: opNum, when });
-      if (navigator.share) {
-        try { await navigator.share({ title: t("paidTitle"), text }); } catch (e) { /* closed by the user */ }
-        return;
+      const blob = await image;
+      const file = blob && new File([blob], `yafi-${opNum}.png`, { type: "image/png" });
+      try {
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) return await navigator.share({ files: [file], text });
+        if (navigator.share) return await navigator.share({ title: t("paidTitle"), text });
+      } catch (e) {
+        if (e && e.name === "AbortError") return; // closed by the user
       }
       try { await navigator.clipboard.writeText(text); toast(t("shareCopied")); } catch (e) { toast(text); }
     });

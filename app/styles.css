@@ -129,20 +129,37 @@ h2 { font-size: 20px; margin: 4px 0 12px; }
 .ring { width: 64px; height: 64px; border-radius: 50%; border: 5px solid var(--surface-2); border-top-color: var(--lime); animation: spin .9s linear infinite; }
 
 /* ---------- Receipt ---------- */
-.receipt { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px 18px 18px; margin-bottom: 14px; text-align: center; animation: rise .35s ease; }
-.receipt h2 { margin: 6px 0 2px; }
-.receipt-amount { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.receipt-rows { text-align: left; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); margin: 14px 0; padding: 10px 0; display: grid; gap: 8px; font-size: 14px; }
-.receipt-rows .row { display: flex; justify-content: space-between; gap: 12px; }
-.receipt-rows .row span { color: var(--muted); }
-.receipt-rows .row.loan, .receipt-rows .row.loan span { color: var(--lime); }
+/* Voucher in the style of payment apps: brand header, check on the edge, perforated stub */
+.voucher { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 22px; margin-bottom: 14px; text-align: center; overflow: hidden; animation: rise .35s ease; }
+.v-head { background: var(--grad); height: 92px; display: flex; align-items: flex-start; padding: 16px 18px; }
+.v-brand { display: flex; align-items: center; gap: 8px; color: #0D0A1A; font-weight: 900; font-size: 20px; letter-spacing: .5px; }
+.v-brand img { border-radius: 8px; box-shadow: 0 2px 8px rgba(13, 10, 26, .25); }
+.v-check { width: 84px; height: 84px; margin: -42px auto 0; border-radius: 50%; background: var(--surface); display: grid; place-items: center; position: relative; }
+.v-check .check { width: 68px; height: 68px; }
+.v-body { padding: 4px 18px 18px; }
+.v-body h2 { margin: 4px 0 0; font-size: 21px; }
+.v-amount { font-size: 48px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -1px; line-height: 1.15; }
+.v-amount .cur { font-size: 24px; font-weight: 700; color: var(--muted); margin-right: 4px; vertical-align: 14px; }
+.v-payee { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 14px; text-align: left; }
+.v-payee b, .v-payee span { display: block; }
+.v-payee b { font-size: 17px; }
+.v-cut { position: relative; height: 0; border-top: 2px dashed var(--border); margin: 4px 22px; }
+.v-cut::before, .v-cut::after { content: ""; position: absolute; top: -13px; width: 24px; height: 24px; border-radius: 50%; background: var(--bg); border: 1px solid var(--border); }
+.v-cut::before { left: -36px; }
+.v-cut::after { right: -36px; }
+.v-rows { padding: 14px 20px 6px; display: grid; gap: 10px; font-size: 15px; text-align: left; }
+.v-rows .row { display: flex; justify-content: space-between; gap: 12px; }
+.v-rows .row span { color: var(--muted); }
+.v-rows .row b { font-variant-numeric: tabular-nums; }
+.v-foot { padding: 12px 18px 18px; display: grid; gap: 10px; justify-items: center; }
+.v-tagline { font-weight: 800; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 17px; }
 .check { width: 72px; height: 72px; }
 .check circle { fill: none; stroke: var(--green); stroke-width: 3; stroke-dasharray: 151; stroke-dashoffset: 151; animation: draw .5s ease forwards; }
 .check path { fill: none; stroke: var(--green); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: draw .35s .45s ease forwards; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 @keyframes rise { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 .big-ico { font-size: 44px; }
-@media (prefers-reduced-motion: reduce) { .check circle, .check path { animation: none; stroke-dashoffset: 0; } .receipt { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .check circle, .check path { animation: none; stroke-dashoffset: 0; } .voucher { animation: none; } }
 .slogan { font-size: 18px; font-weight: 700; margin: 0 0 10px; }
 
 /* ---------- QR scan (simulated) ---------- */
