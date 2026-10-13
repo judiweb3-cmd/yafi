@@ -4,8 +4,8 @@ window.YAFI_CONFIG = {
   rpcUrl: "https://testnet-rpc.monad.xyz",
   explorer: "https://testnet.monadexplorer.com",
 
-  // YafiCreditEscrow deployed on Monad Testnet
-  contract: "0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831",
+  // YafiCreditEscrowV2 deployed on Monad Testnet (v1 was 0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831)
+  contract: "0x21B86c97989ae1962928706dCe8042568C340845",
 
   // Wallet of "Rosa", the demo merchant
   merchant: "0x44e0C28209F3c2735613b13c3813826A9eeC135D",
