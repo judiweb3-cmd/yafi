@@ -766,7 +766,12 @@
     const s = Math.floor(cents / 100), c = cents % 100;
     if (lang !== "es") { // "4.50 soles" can be misread by English voices; say it in words
       const w = s === 1 ? "1 sol" : s + " soles";
-      return !c ? w : s ? w + " and " + c + " cents" : c + " cents";
+      const sol = !c ? w : s ? w + " and " + c + " cents" : c + " cents";
+      if (!CFG.solesPerUsd) return sol;
+      // Visitors who switch to English hear a dollar reference too, as the screen shows "≈ US$"
+      const uc = Math.round(cents / CFG.solesPerUsd), d = Math.floor(uc / 100), dc = uc % 100;
+      const usd = (d ? (d === 1 ? "1 dollar" : d + " dollars") + (dc ? " and " + dc + " cents" : "") : dc + " cents");
+      return sol + ", about " + usd;
     }
     const whole = s === 1 ? "1 sol" : s + " soles";
     if (!c) return whole;
