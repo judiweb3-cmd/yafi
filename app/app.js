@@ -105,6 +105,7 @@
       newSale: "¡Nueva venta!",
       soundOn: "🔔 Activar sonido de ventas",
       soundReady: "🔔 Sonido activado",
+      voicePaid: "¡Listo! Pagaste con Yafi.", voiceSale: "Yafi. Recibiste {x}.",
       sessionTotal: "Recibiste en esta sesión",
       salesN: "{n} ventas",
       verified: "Comercio verificado",
@@ -195,6 +196,7 @@
       newSale: "New sale!",
       soundOn: "🔔 Turn on sale sounds",
       soundReady: "🔔 Sounds on",
+      voicePaid: "Done! You paid with Yafi.", voiceSale: "Yafi. You received {x}.",
       sessionTotal: "Received this session",
       salesN: "{n} sales",
       verified: "Verified merchant",
@@ -556,6 +558,7 @@
   }
 
   async function pay() {
+    unlockSound(); // the Pay tap is what lets the receipt play the YAFI sound
     const note = document.getElementById("payNote");
     const sol = amountNum();
     try {
@@ -601,6 +604,8 @@
       <button class="btn btn-primary" id="againBtn" type="button">${t("payAgain")}</button>
       <a class="btn btn-secondary" href="#/rosa">${t("seeRosa")}</a>`;
     document.getElementById("againBtn").addEventListener("click", renderPay);
+    playYafiChime();
+    say(t("voicePaid"), 900);
     // Share like any payment app: the phone's own menu (WhatsApp, Gmail, Telegram…), or copy as a fallback
     document.getElementById("shareBtn").addEventListener("click", async () => {
       const text = t("shareText", { x: fmtSol(sol), op: opNum, when });
@@ -638,6 +643,7 @@
 
   // Fallback for visitors who already have MetaMask (e.g. a judge): pay from their own wallet.
   async function payWithWallet() {
+    unlockSound();
     const btn = document.getElementById("walletBtn");
     const note = document.getElementById("walletNote");
     const sol = amountNum();
@@ -662,21 +668,64 @@
   let fromBlock = null;
   let feedPrimed = false; // no alert for sales already on chain when the view opens
 
-  // "Cha-ching": a few falling-coin pings and a register bell, synthesized (no audio files)
-  function playChaChing() {
-    const ctx = saleAlert.ctx;
-    if (!ctx) return; // sound stays off until Rosa taps the sound button
+  // ---------- YAFI sound ----------
+  // One signature on every YAFI payment, on both phones, so people learn to recognise it the way
+  // they recognise a Yape: two notes ("YA-FI"), a bright chime and a short voice line. All of it is
+  // synthesized in the browser (no audio files). Browsers only allow sound after a tap.
+  const sound = { ctx: null };
+  function unlockSound() {
     try {
-      const ping = (hz, at, dur, vol, type) => {
-        const o = ctx.createOscillator(), g = ctx.createGain();
-        o.type = type; o.frequency.value = hz; o.connect(g); g.connect(ctx.destination);
-        const t0 = ctx.currentTime + at;
-        g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        o.start(t0); o.stop(t0 + dur + 0.02);
-      };
-      [0, 0.07, 0.13, 0.18, 0.22].forEach((at, i) => ping(2400 + i * 180, at, 0.09, 0.08, "triangle"));
-      [1568, 2093, 3136].forEach((hz) => ping(hz, 0.3, 0.6, 0.09, "sine"));
+      sound.ctx = sound.ctx || new (window.AudioContext || window.webkitAudioContext)();
+      sound.ctx.resume();
+      if (window.speechSynthesis) speechSynthesis.speak(new SpeechSynthesisUtterance("")); // iOS needs a first call in a tap
+    } catch (e) { /* no audio support */ }
+  }
+  function tone(hz, at, dur, vol, type) {
+    const ctx = sound.ctx;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.value = hz; o.connect(g); g.connect(ctx.destination);
+    const t0 = ctx.currentTime + at;
+    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  // "YA-FI ✨": the brand signature, shared by the customer receipt and Rosa's sale alert
+  function playYafiChime(at = 0) {
+    if (!sound.ctx) return;
+    try {
+      tone(784, at, 0.16, 0.12, "triangle");          // YA
+      tone(1175, at + 0.15, 0.22, 0.12, "triangle");  // FI
+      [1568, 1976, 2349].forEach((hz) => tone(hz, at + 0.34, 0.7, 0.06, "sine")); // chime
     } catch (e) { /* audio not available */ }
+  }
+  // Rosa hears coins falling into the register, then the YAFI signature
+  function playChaChing() {
+    if (!sound.ctx) return; // sound stays off until Rosa taps the sound button
+    try {
+      [0, 0.07, 0.13, 0.18, 0.22].forEach((at, i) => tone(2400 + i * 180, at, 0.09, 0.08, "triangle"));
+      playYafiChime(0.3);
+    } catch (e) { /* audio not available */ }
+  }
+  function say(text, delayMs) {
+    if (!sound.ctx || !window.speechSynthesis) return;
+    setTimeout(() => {
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = lang === "es" ? "es-PE" : "en-US";
+        const v = speechSynthesis.getVoices().find((x) => x.lang && x.lang.toLowerCase().startsWith(lang));
+        if (v) u.voice = v;
+        speechSynthesis.cancel();
+        speechSynthesis.speak(u);
+      } catch (e) { /* no speech support */ }
+    }, delayMs);
+  }
+  // Amounts read the way people say them: "4 soles con 50 céntimos"
+  function spokenSoles(wei) {
+    const cents = Math.round(Number(ethers.formatEther(wei)) / CFG.monPerSol * 100);
+    const s = Math.floor(cents / 100), c = cents % 100;
+    if (lang !== "es") return (cents / 100).toFixed(2) + " soles";
+    const whole = s === 1 ? "1 sol" : s + " soles";
+    if (!c) return whole;
+    return s ? whole + " con " + c + " céntimos" : c + " céntimos";
   }
 
   // Celebrate each new sale the way payment apps do: banner, short vibration and the register sound
@@ -693,6 +742,7 @@
     saleAlert._t = setTimeout(() => { el.hidden = true; }, 3500);
     if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
     playChaChing();
+    say(t("voiceSale", { x: spokenSoles(f.amount - f.retained) }), 1100);
   }
 
   async function renderRosa() {
@@ -703,7 +753,7 @@
         <div class="merchant-head"><div class="avatar">🥪</div><div><div class="name">${t("hello")}</div><div class="sub">${t("shopSub")}</div></div></div>
         <div id="loan" style="margin-top:18px"><span class="spinner"></span></div>
       </section>
-      <button class="btn btn-secondary sound-btn" id="soundBtn" type="button">${saleAlert.ctx ? t("soundReady") : t("soundOn")}</button>
+      <button class="btn btn-secondary sound-btn" id="soundBtn" type="button">${sound.ctx ? t("soundReady") : t("soundOn")}</button>
       <section class="card">
         <div class="session" id="session"></div>
         <h2>${t("liveSales")}</h2>
@@ -712,12 +762,9 @@
       <div class="sale-alert" id="saleAlert" hidden></div>`;
     feedPrimed = false;
     document.getElementById("soundBtn").addEventListener("click", (ev) => {
-      // Browsers only allow sound after a tap: create and unlock the audio context here
-      try {
-        saleAlert.ctx = saleAlert.ctx || new (window.AudioContext || window.webkitAudioContext)();
-        saleAlert.ctx.resume();
-        playChaChing();
-      } catch (e) { /* no audio support */ }
+      // Browsers only allow sound after a tap: unlock it here
+      unlockSound();
+      playChaChing();
       ev.target.textContent = t("soundReady");
     });
     renderFeed();
