@@ -19,6 +19,9 @@ window.YAFI_CONFIG = {
   // Demo exchange rate: 1 sol (PEN) = 0.001 testnet MON
   monPerSol: 0.001,
 
+  // Default interest rate shown in the admin panel (% per month; 6% = 72% simple annual)
+  demoMonthlyRate: 6,
+
   // Reference exchange rate shown to English-speaking visitors (S/ per US$, verified 12 Oct 2026)
   solesPerUsd: 3.436,
 
