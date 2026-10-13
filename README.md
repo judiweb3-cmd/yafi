@@ -49,14 +49,14 @@ Everything in this repository was written during the hackathon window (October 2
 |---|---|
 | `contracts/YafiCreditEscrowV2.sol` | Escrow that holds the lending treasury, grants loans, and splits every sale between the merchant and the loan repayment, plus the three risk controls above. Retention is set in basis points with a hard 30% cap, has a reentrancy guard, owner-only lending and custom errors. |
 | `contracts/YafiCreditEscrow.sol` | The first version (v1), used for the first on-chain test. Same split logic without the risk controls. |
-| `test/` | 35 Hardhat tests: 22 for v2 (the ladder, outstanding loans, self-payment, minimum sale, per-loan progress, the split, never over-collecting, frozen lines, admin controls) and 13 for v1. |
+| `test/` | 43 Hardhat tests: 30 for v2 (the ladder, outstanding loans, self-payment, minimum sale, per-loan progress, the split, never over-collecting, frozen lines, admin controls) and 13 for v1. |
 | `app/` | Mobile web app (ES/EN). **Pay Rosa** (customer), **Rosa's view** (live loan balance, sales feed read from contract events, and the size of her next loan) and an **admin panel** (lender, via MetaMask, showing the credit available to Rosa). The app detects whether the contract is v1 or v2. |
 
 ### Live on Monad Testnet
 
 - Contract: [`0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831`](https://testnet.monadexplorer.com/address/0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831), deployed with Remix (Solidity 0.8.34) and a 5 MON treasury.
 - Demo merchant "Rosa": [`0x44e0C28209F3c2735613b13c3813826A9eeC135D`](https://testnet.monadexplorer.com/address/0x44e0C28209F3c2735613b13c3813826A9eeC135D).
-- This first deployment is v1. The v2 contract with the risk controls is tested locally (35 tests passing) and will replace it on Monad Testnet.
+- This first deployment is v1. The v2 contract with the risk controls is tested locally (43 tests passing) and will replace it on Monad Testnet.
 - On-chain proof: a 0.5 MON loan (S/ 500 at the demo rate) was granted to Rosa, then a S/ 10 sale left her debt at S/ 499, with 1 sale recorded. All transactions are listed on the contract's explorer page.
 
 ## Try it (judges)
@@ -125,17 +125,17 @@ Requirements: Node.js 18+ and npm.
 git clone https://github.com/judiweb3-cmd/yafi
 cd yafi
 npm install
-npx hardhat test          # 35 passing
+npx hardhat test          # 43 passing
 ```
 
-**Deploy your own contract (optional).** Either paste `contracts/YafiCreditEscrowV2.sol` into [Remix](https://remix.ethereum.org), compile with 0.8.34 and deploy with MetaMask on Monad Testnet with the constructor arguments `_firstLoanCap = 500000000000000000` (0.5 MON) and `_minSaleAmount = 1000000000000000` (0.001 MON), or use Hardhat:
+**Deploy your own contract (optional).** Either paste `contracts/YafiCreditEscrowV2.sol` into [Remix](https://remix.ethereum.org), compile with 0.8.34 and deploy with MetaMask on Monad Testnet with the constructor arguments `_firstLoanCap = 500000000000000000` (0.5 MON), `_maxLoanCap = 5000000000000000000` (5 MON), `_minSaleAmount = 1000000000000000` (0.001 MON) and `_maxAnnualRateBps = 7500` (75% a year), or use Hardhat:
 
 ```bash
 cp .env.example .env      # add the PRIVATE_KEY of a testnet-only wallet
 INITIAL_TREASURY=1 npm run deploy:testnet          # v2; VERSION=1 deploys v1
 ```
 
-Then call `grantCredit(merchant, amountInWei, retentionBps)` from the owner account, for example `grantCredit(<merchant>, 500000000000000000, 1000)` for 0.5 MON at 10%.
+Then call `grantCredit(merchant, amountInWei, retentionBps, annualRateBps)` from the owner account, for example `grantCredit(<merchant>, 500000000000000000, 1000, 6000)` for 0.5 MON, 10% retention per sale and a 60% simple annual rate (5% a month). The first v1 contract takes `grantCredit(merchant, amountInWei, retentionBps)`.
 
 **Run the app locally.** Set `contract` and `merchant` in `app/config.js`, then serve the folder:
 

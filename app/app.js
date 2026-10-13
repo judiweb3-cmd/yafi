@@ -14,43 +14,49 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* no storage available */ } }
   };
 
-  // Works with both deployed versions: v2 adds the credit ladder, the self-payment block and
-  // a minimum sale, and returns a longer merchant record. The version is detected on chain.
+  // Works with both deployed versions. v2 adds the risk controls, interest on the balance and
+  // a richer merchant record; the version is detected on chain.
   const ABI = [
     "function owner() view returns (address)",
     "function treasury() view returns (uint256)",
-    "function merchants(address) view returns (uint256 creditBalance, uint256 currentLoan, uint256 totalGranted, uint256 totalRepaid, uint256 repaidFromSales, uint256 salesCount, uint32 loansRepaid, uint16 retentionBps, bool isActive)",
+    "function getMerchant(address merchant) view returns ((uint256 creditBalance, uint256 currentLoan, uint256 creditLine, uint256 loanInterest, uint256 loanRepaid, uint256 repaidFromSales, uint256 totalGranted, uint256 totalRepaid, uint256 totalInterest, uint256 totalWrittenOff, uint256 salesCount, uint64 loanId, uint40 loanGrantedAt, uint40 lastRepaymentAt, uint40 lastAccrualAt, uint32 loansRepaid, uint32 loansWrittenOff, uint16 retentionBps, uint16 annualRateBps, bool frozen))",
+    "function currentDebt(address merchant) view returns (uint256)",
     "function creditLimit(address merchant) view returns (uint256)",
     "function firstLoanCap() view returns (uint256)",
-    "function minSaleAmount() view returns (uint256)",
+    "function maxAnnualRateBps() view returns (uint16)",
     "function previewSale(address merchant, uint256 amount) view returns (uint256 retained, uint256 netToMerchant)",
     "function repaymentProgressBps(address merchant) view returns (uint256)",
     "function processSale(address merchant) payable",
-    "function grantCredit(address merchant, uint256 amount, uint16 retentionBps)",
+    "function grantCredit(address merchant, uint256 amount, uint16 retentionBps, uint16 annualRateBps)",
     "function fundTreasury() payable",
     "event SaleProcessed(address indexed merchant, address indexed payer, uint256 amount, uint256 retained, uint256 netToMerchant)",
-    "event CreditFullyRepaid(address indexed merchant, uint256 totalRepaid)",
-    "error NotOwner()",
-    "error Reentrancy()",
-    "error ZeroAddress()",
-    "error ZeroAmount()",
-    "error RetentionOutOfRange()",
-    "error InsufficientTreasury()",
-    "error TransferFailed()",
-    "error OutstandingLoan()",
     "error AboveCreditLimit(uint256 limit)",
-    "error SelfPayment()",
+    "error InsufficientTreasury()",
+    "error InvalidLimits()",
+    "error MerchantFrozen()",
+    "error NoOutstandingLoan()",
+    "error NotOwner()",
+    "error NotPendingOwner()",
+    "error OutstandingLoan()",
+    "error Paused()",
+    "error RateAboveMaximum(uint16 maximum)",
+    "error Reentrancy()",
+    "error RetentionOutOfRange()",
     "error SaleBelowMinimum(uint256 minimum)",
-    "error NoOutstandingLoan()"
+    "error SelfPayment()",
+    "error TransferFailed()",
+    "error ZeroAddress()",
+    "error ZeroAmount()"
   ];
-  const ABI_V1_MERCHANTS = [
-    "function merchants(address) view returns (uint256 creditBalance, uint256 totalGranted, uint256 totalRepaid, uint256 salesCount, uint16 retentionBps, bool isActive)"
+  const ABI_V1 = [
+    "function merchants(address) view returns (uint256 creditBalance, uint256 totalGranted, uint256 totalRepaid, uint256 salesCount, uint16 retentionBps, bool isActive)",
+    "function grantCredit(address merchant, uint256 amount, uint16 retentionBps)"
   ];
 
   // No cache (balances change every block) and fast polling: Monad confirms in under a second
   const provider = new ethers.JsonRpcProvider(CFG.rpcUrl, CFG.chainId, { staticNetwork: true, cacheTimeout: -1, pollingInterval: 500 });
   const yafi = new ethers.Contract(CFG.contract, ABI, provider);
-  const yafiV1 = new ethers.Contract(CFG.contract, ABI_V1_MERCHANTS, provider);
+  const yafiV1 = new ethers.Contract(CFG.contract, ABI_V1, provider);
   const configured = CFG.contract !== ethers.ZeroAddress && CFG.merchant !== ethers.ZeroAddress;
 
   // v2 exposes firstLoanCap(); v1 reverts on it. Only a definite answer is cached, so a
@@ -66,9 +72,10 @@
   // Same shape for both versions; currentLoan is the loan being repaid now.
   async function readMerchant(addr) {
     if (await isV2()) {
-      const m = await yafi.merchants(addr);
-      return { creditBalance: m.creditBalance, currentLoan: m.currentLoan, totalGranted: m.totalGranted, totalRepaid: m.totalRepaid,
-        salesCount: m.salesCount, retentionBps: m.retentionBps, isActive: m.isActive, limit: await yafi.creditLimit(addr) };
+      const [m, debt, limit] = await Promise.all([yafi.getMerchant(addr), yafi.currentDebt(addr), yafi.creditLimit(addr)]);
+      return { creditBalance: debt, currentLoan: m.currentLoan, totalGranted: m.totalGranted, totalRepaid: m.totalRepaid,
+        salesCount: m.salesCount, retentionBps: m.retentionBps, annualRateBps: m.annualRateBps,
+        isActive: !m.frozen && debt > 0n, limit };
     }
     const m = await yafiV1.merchants(addr);
     return { creditBalance: m.creditBalance, currentLoan: m.totalGranted, totalGranted: m.totalGranted, totalRepaid: m.totalRepaid,
@@ -145,6 +152,9 @@
       errNotOwner: "Solo la administradora puede hacer esto.",
       errTreasury: "La caja no tiene fondos suficientes.",
       errRetention: "La retención debe estar entre 0.01% y 30%.",
+      errPaused: "El servicio está en pausa por mantenimiento. Intenta más tarde.",
+      errFrozen: "La línea de este comercio está congelada.",
+      errRate: "La tasa supera el máximo permitido ({x}% mensual).",
       liveSales: "Ventas en vivo",
       waitingSales: "Esperando ventas… abre «Pagar a Rosa» en otro celular.",
       saleRow: "Venta de {x}",
@@ -160,6 +170,7 @@
       grantTitle: "Otorgar préstamo a Rosa",
       amountSoles: "Monto (S/)",
       retention: "Retención por venta (%)",
+      monthlyRate: "Tasa de interés (% mensual)",
       grantBtn: "Desembolsar",
       fundTitle: "Enviar saldo de prueba a un visitante",
       address: "Código del visitante",
@@ -234,6 +245,9 @@
       errNotOwner: "Only the admin can do this.",
       errTreasury: "The treasury does not have enough funds.",
       errRetention: "Retention must be between 0.01% and 30%.",
+      errPaused: "The service is paused for maintenance. Please try later.",
+      errFrozen: "This merchant's credit line is frozen.",
+      errRate: "The rate is above the allowed maximum ({x}% per month).",
       liveSales: "Live sales",
       waitingSales: "Waiting for sales… open “Pay Rosa” on another phone.",
       saleRow: "Sale of {x}",
@@ -249,6 +263,7 @@
       grantTitle: "Grant a loan to Rosa",
       amountSoles: "Amount (S/)",
       retention: "Retention per sale (%)",
+      monthlyRate: "Interest rate (% per month)",
       grantBtn: "Disburse",
       fundTitle: "Send test funds to a visitor",
       address: "Visitor code",
@@ -306,6 +321,9 @@
         case "NotOwner": return t("errNotOwner");
         case "InsufficientTreasury": return t("errTreasury");
         case "RetentionOutOfRange": return t("errRetention");
+        case "Paused": return t("errPaused");
+        case "MerchantFrozen": return t("errFrozen");
+        case "RateAboveMaximum": return t("errRate", { x: (Number(rv.args[0]) / 1200).toFixed(2) });
       }
     }
     // v1 revert strings
@@ -832,6 +850,7 @@
         <p class="muted small" id="line"></p>
         <label class="field"><span>${t("amountSoles")}</span><input id="gAmt" type="number" min="1" value="500" /></label>
         <label class="field"><span>${t("retention")}</span><input id="gRet" type="number" min="1" max="30" value="10" /></label>
+        <label class="field" id="rateField"><span>${t("monthlyRate")}</span><input id="gRate" type="number" min="0" step="0.1" value="${CFG.demoMonthlyRate || 0}" /></label>
         <button class="btn btn-secondary" id="grantBtn" type="button">${t("grantBtn")}</button>
       </section>
       <section class="card">
@@ -873,7 +892,10 @@
     document.getElementById("grantBtn").addEventListener("click", () => run("grantBtn", () => {
       const sol = Number(document.getElementById("gAmt").value);
       const bps = Math.round(Number(document.getElementById("gRet").value) * 100);
-      return yafi.connect(adminSigner).grantCredit(CFG.merchant, weiFromSoles(sol), bps);
+      if (!v2Known) return yafiV1.connect(adminSigner).grantCredit(CFG.merchant, weiFromSoles(sol), bps);
+      // The contract takes a simple annual rate; the panel asks for a monthly one, as lenders quote it
+      const rateBps = Math.round(Number(document.getElementById("gRate").value) * 12 * 100);
+      return yafi.connect(adminSigner).grantCredit(CFG.merchant, weiFromSoles(sol), bps, rateBps);
     }));
     document.getElementById("fundBtn").addEventListener("click", () => run("fundBtn", () => {
       const to = document.getElementById("fAddr").value.trim();
