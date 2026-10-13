@@ -97,8 +97,6 @@
       asMerchant: "Ver como Rosa", asMerchantSub: "Prueba como comerciante",
       shopName: "Desayunos Rosa", shopSub: "Carrito de desayunos · Piura",
       payTitle: "¿Cuánto vas a pagar?",
-      rosaGets: "Rosa recibe", loanGets: "Paga su préstamo",
-      noLoan: "Rosa no tiene préstamo activo: recibe el 100%.",
       payBtn: "Pagar {x}",
       payTo: "Pagar a",
       scanTitle: "Escanea el QR del comercio",
@@ -119,8 +117,6 @@
       preparing: "Conectando de forma segura…",
       paying: "Procesando pago…",
       paidTitle: "¡Pago enviado!",
-      paidDetail: "Rosa recibió {net} y {ret} fueron a su préstamo.",
-      paidAll: "Rosa recibió {net} completos.",
       paidTime: "Confirmado en {s} s",
       payAgain: "Pagar otra vez",
       seeRosa: "Ver lo que ve Rosa",
@@ -189,8 +185,6 @@
       asMerchant: "See it as Rosa", asMerchantSub: "Try it as the merchant",
       shopName: "Rosa's Breakfast", shopSub: "Breakfast cart · Piura, Peru",
       payTitle: "How much are you paying?",
-      rosaGets: "Rosa receives", loanGets: "Repays her loan",
-      noLoan: "Rosa has no active loan: she receives 100%.",
       payBtn: "Pay {x}",
       payTo: "Pay to",
       scanTitle: "Scan the merchant's QR",
@@ -211,8 +205,6 @@
       preparing: "Connecting securely…",
       paying: "Processing payment…",
       paidTitle: "Payment sent!",
-      paidDetail: "Rosa received {net} and {ret} went to her loan.",
-      paidAll: "Rosa received the full {net}.",
       paidTime: "Confirmed in {s} s",
       payAgain: "Pay again",
       seeRosa: "See what Rosa sees",
@@ -482,7 +474,6 @@
   const MAX_SOL = 50;  // keeps the test balance enough for several payments
   let amountStr = "10";
   let lastPayAt = 0;
-  let previewTimer = null;
   const amountNum = () => Number(amountStr) || 0;
   const fmtSol = (n) => "S/ " + n.toFixed(2);
   // English viewers (e.g. global judges) also see an approximate US dollar reference.
@@ -511,7 +502,6 @@
       <section class="amount-box">
         <div class="amount" id="amount"></div>
         <div class="usd muted small" id="usd"></div>
-        <div class="split-pill" id="split"><span class="spinner"></span></div>
       </section>
       <div class="chips">
         ${[5, 10, 20].map((v) => `<button class="chip" data-v="${v}" type="button">S/ ${v}</button>`).join("")}
@@ -552,24 +542,6 @@
     btn.disabled = !ok;
     btn.textContent = t("payBtn", { x: fmtSol(n) });
     document.getElementById("payNote").textContent = ok ? "" : t("range", { min: fmtSol(MIN_SOL), max: fmtSol(MAX_SOL) });
-    clearTimeout(previewTimer);
-    if (ok) previewTimer = setTimeout(refreshSplit, 250);
-    else document.getElementById("split").textContent = "";
-  }
-
-  async function refreshSplit() {
-    const split = document.getElementById("split");
-    if (!split) return;
-    const asked = amountStr;
-    try {
-      const [retained, net] = await yafi.previewSale(CFG.merchant, weiFromSoles(amountNum()));
-      if (asked !== amountStr || !document.getElementById("split")) return; // amount changed meanwhile
-      split.innerHTML = retained > 0n
-        ? `<span>${t("rosaGets")} <b>${soles(net)}</b></span><span class="dot">·</span><span class="loan">${t("loanGets")} <b>${soles(retained)}</b></span>`
-        : `<span>${t("noLoan")}</span>`;
-    } catch (e) {
-      split.textContent = friendlyError(e);
-    }
   }
 
   function overlay(text) {
@@ -595,29 +567,17 @@
       overlay(t("paying"));
       const t0 = performance.now();
       const tx = await yafi.connect(getCustomer()).processSale(CFG.merchant, { value: wei });
-      const rcpt = await tx.wait();
+      await tx.wait();
       lastPayAt = Date.now();
       if (currentRoute() !== "pagar") return; // the user navigated away meanwhile
-      renderPaid(sol, rcpt, ((performance.now() - t0) / 1000).toFixed(1), tx.hash);
+      renderPaid(sol, ((performance.now() - t0) / 1000).toFixed(1), tx.hash);
     } catch (e) {
       overlay(null);
       if (note) note.textContent = friendlyError(e);
     }
   }
 
-  function splitFromReceipt(rcpt, wei) {
-    let retained = 0n, net = wei;
-    for (const log of rcpt.logs) {
-      try {
-        const p = yafi.interface.parseLog(log);
-        if (p && p.name === "SaleProcessed") { retained = p.args.retained; net = p.args.netToMerchant; }
-      } catch (e) { /* other event */ }
-    }
-    return { retained, net };
-  }
-
-  function renderPaid(sol, rcpt, secs, hash) {
-    const { retained, net } = splitFromReceipt(rcpt, weiFromSoles(sol));
+  function renderPaid(sol, secs, hash) {
     const when = new Date().toLocaleString(lang === "es" ? "es-PE" : "en-US", { dateStyle: "medium", timeStyle: "short" });
     const opNum = opNumber(hash);
     view().innerHTML = `
@@ -628,8 +588,6 @@
         ${usdRef(sol) ? `<div class="muted small">${usdRef(sol)}</div>` : ""}
         <p class="muted">${t("paidTo")} <b>${t("shopName")}</b></p>
         <div class="receipt-rows">
-          <div class="row"><span>${t("rosaGets")}</span><b>${soles(net)}</b></div>
-          <div class="row loan"><span>${t("loanGets")}</span><b>${soles(retained)}</b></div>
           <div class="row"><span>${t("opNumber")}</span><b>${opNum}</b></div>
           <div class="row"><span>${t("date")}</span><b>${esc(when)}</b></div>
         </div>
@@ -675,8 +633,8 @@
       const signer = await connectWallet();
       const t0 = performance.now();
       const tx = await yafi.connect(signer).processSale(CFG.merchant, { value: weiFromSoles(sol) });
-      const rcpt = await provider.waitForTransaction(tx.hash);
-      renderPaid(sol, rcpt, ((performance.now() - t0) / 1000).toFixed(1), tx.hash);
+      await tx.wait(); // throws if the payment reverted
+      renderPaid(sol, ((performance.now() - t0) / 1000).toFixed(1), tx.hash);
     } catch (e) {
       btn.disabled = false;
       btn.textContent = t("payWallet", { x: fmtSol(sol) });

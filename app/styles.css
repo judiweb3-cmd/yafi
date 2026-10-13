@@ -119,10 +119,6 @@ h2 { font-size: 20px; margin: 4px 0 12px; }
 .amount { font-size: 54px; font-weight: 800; letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .amount .cur { font-size: 26px; color: var(--muted); margin-right: 6px; vertical-align: 14px; font-weight: 700; }
 .usd { margin-top: 2px; min-height: 18px; }
-.split-pill { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; margin-top: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 7px 14px; font-size: 13px; color: var(--muted); min-height: 34px; align-items: center; }
-.split-pill b { color: var(--text); font-variant-numeric: tabular-nums; }
-.split-pill .loan, .split-pill .loan b { color: var(--lime); }
-.split-pill .dot { opacity: .5; }
 .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 14px; }
 .key { background: transparent; color: var(--text); border: 0; border-radius: 14px; padding: 14px 0; font-size: 24px; font-weight: 600; -webkit-tap-highlight-color: transparent; }
 .key:active { background: var(--surface-2); }
