@@ -670,14 +670,17 @@
     saleAlert._t = setTimeout(() => { el.hidden = true; }, 3500);
     if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
     try {
+      // "Cha-ching": a few falling-coin pings and a register bell, synthesized (no audio files)
       const ctx = saleAlert.ctx || (saleAlert.ctx = new (window.AudioContext || window.webkitAudioContext)());
-      [880, 1320].forEach((hz, i) => {
+      const ping = (hz, at, dur, vol, type) => {
         const o = ctx.createOscillator(), g = ctx.createGain();
-        o.frequency.value = hz; o.connect(g); g.connect(ctx.destination);
-        const t0 = ctx.currentTime + i * 0.12;
-        g.gain.setValueAtTime(0.15, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
-        o.start(t0); o.stop(t0 + 0.22);
-      });
+        o.type = type; o.frequency.value = hz; o.connect(g); g.connect(ctx.destination);
+        const t0 = ctx.currentTime + at;
+        g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.start(t0); o.stop(t0 + dur + 0.02);
+      };
+      [0, 0.07, 0.13, 0.18, 0.22].forEach((at, i) => ping(2400 + i * 180, at, 0.09, 0.08, "triangle"));
+      [1568, 2093, 3136].forEach((hz) => ping(hz, 0.3, 0.6, 0.09, "sine"));
     } catch (e) { /* audio not allowed until the user interacts */ }
   }
 
