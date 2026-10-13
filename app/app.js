@@ -40,7 +40,8 @@
     "error OutstandingLoan()",
     "error AboveCreditLimit(uint256 limit)",
     "error SelfPayment()",
-    "error SaleBelowMinimum(uint256 minimum)"
+    "error SaleBelowMinimum(uint256 minimum)",
+    "error NoOutstandingLoan()"
   ];
   const ABI_V1_MERCHANTS = [
     "function merchants(address) view returns (uint256 creditBalance, uint256 totalGranted, uint256 totalRepaid, uint256 salesCount, uint16 retentionBps, bool isActive)"

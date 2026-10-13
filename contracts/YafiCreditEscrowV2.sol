@@ -10,6 +10,8 @@ pragma solidity ^0.8.24;
 ///      1. Credit ladder: a first loan is capped, and a new loan is only possible after the
 ///         previous one is fully repaid, up to 150% of it.
 ///      2. No self-payment: a merchant cannot pay their own sales to inflate their history.
+///         They can still repay directly with `repay()` (e.g. from cash sales); that lowers
+///         the debt and counts as repayment, but never as a sale.
 ///      3. Minimum sale: dust sales cannot inflate the sales count.
 contract YafiCreditEscrowV2 {
     struct Merchant {
@@ -46,11 +48,13 @@ contract YafiCreditEscrowV2 {
     error AboveCreditLimit(uint256 limit);
     error SelfPayment();
     error SaleBelowMinimum(uint256 minimum);
+    error NoOutstandingLoan();
 
     event TreasuryFunded(address indexed from, uint256 amount);
     event CreditGranted(address indexed merchant, uint256 amount, uint16 retentionBps);
     event SaleProcessed(address indexed merchant, address indexed payer, uint256 amount, uint256 retained, uint256 netToMerchant);
     event CreditFullyRepaid(address indexed merchant, uint256 totalRepaid);
+    event DirectRepayment(address indexed merchant, uint256 amount);
     event RetentionUpdated(address indexed merchant, uint16 retentionBps);
     event MerchantStatusChanged(address indexed merchant, bool isActive);
     event LimitsUpdated(uint256 firstLoanCap, uint256 minSaleAmount);
@@ -155,6 +159,33 @@ contract YafiCreditEscrowV2 {
         if (!ok) revert TransferFailed();
 
         emit SaleProcessed(merchant, msg.sender, msg.value, retained, net);
+    }
+
+    /// @notice The merchant repays their own loan directly, for example with cash sales.
+    ///         It lowers the debt and counts as repayment history, but not as a sale, so it
+    ///         cannot inflate the sales record. Any amount above the debt is returned.
+    function repay() external payable nonReentrant {
+        if (msg.value == 0) revert ZeroAmount();
+        Merchant storage m = merchants[msg.sender];
+        if (m.creditBalance == 0) revert NoOutstandingLoan();
+
+        uint256 applied = msg.value > m.creditBalance ? m.creditBalance : msg.value;
+        m.creditBalance -= applied;
+        m.totalRepaid += applied;
+        treasury += applied;
+        emit DirectRepayment(msg.sender, applied);
+
+        if (m.creditBalance == 0) {
+            m.isActive = false;
+            m.loansRepaid += 1;
+            emit CreditFullyRepaid(msg.sender, m.totalRepaid);
+        }
+
+        uint256 refund = msg.value - applied;
+        if (refund > 0) {
+            (bool ok, ) = payable(msg.sender).call{value: refund}("");
+            if (!ok) revert TransferFailed();
+        }
     }
 
     function setRetention(address merchant, uint16 retentionBps) external onlyOwner {

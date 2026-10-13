@@ -101,6 +101,40 @@ describe("YafiCreditEscrowV2", function () {
     });
   });
 
+  describe("Direct repayment (e.g. cash sales)", function () {
+    beforeEach(async function () {
+      await yafi.grantCredit(merchant.address, E("0.2"), 1000);
+    });
+
+    it("lowers the debt and counts as repayment, but not as a sale", async function () {
+      await expect(yafi.connect(merchant).repay({ value: E("0.05") }))
+        .to.emit(yafi, "DirectRepayment").withArgs(merchant.address, E("0.05"));
+      const m = await yafi.merchants(merchant.address);
+      expect(m.creditBalance).to.equal(E("0.15"));
+      expect(m.totalRepaid).to.equal(E("0.05"));
+      expect(m.salesCount).to.equal(0);
+      expect(await yafi.treasury()).to.equal(E("9.85"));
+    });
+
+    it("returns any amount above the debt and closes the loan", async function () {
+      const tx = yafi.connect(merchant).repay({ value: E("0.5") });
+      await expect(tx).to.changeEtherBalances([merchant, yafi], [E("-0.2"), E("0.2")]);
+      await expect(tx).to.emit(yafi, "CreditFullyRepaid");
+      const m = await yafi.merchants(merchant.address);
+      expect(m.creditBalance).to.equal(0);
+      expect(m.loansRepaid).to.equal(1);
+      expect(m.salesCount).to.equal(0);
+      expect(await yafi.creditLimit(merchant.address)).to.equal(E("0.3"));
+    });
+
+    it("rejects a repayment with no loan or no value", async function () {
+      await expect(yafi.connect(stranger).repay({ value: E("0.01") }))
+        .to.be.revertedWithCustomError(yafi, "NoOutstandingLoan");
+      await expect(yafi.connect(merchant).repay({ value: 0 }))
+        .to.be.revertedWithCustomError(yafi, "ZeroAmount");
+    });
+  });
+
   describe("Rule 3: minimum sale", function () {
     it("rejects sales below the minimum, including zero", async function () {
       await expect(yafi.connect(customer).processSale(merchant.address, { value: MIN_SALE - 1n }))
