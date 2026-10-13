@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>YAFI · Tus ventas son tu crédito</title>
+  <meta name="description" content="YAFI: microcrédito que se paga solo con cada venta. Demo en Monad Testnet." />
+  <meta name="theme-color" content="#0D0A1A" />
+  <link rel="icon" type="image/png" href="logo.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/" class="brand" aria-label="YAFI">
+      <img src="logo.png" alt="" width="32" height="32" />
+      <span>YAFI</span>
+    </a>
+    <button id="lang" class="lang" type="button" aria-label="Cambiar idioma / Change language">EN</button>
+  </header>
+
+  <main id="view" class="view" aria-live="polite"></main>
+
+  <footer class="foot">
+    <span data-i18n="footer"></span>
+  </footer>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="vendor/ethers.umd.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
