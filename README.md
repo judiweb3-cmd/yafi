@@ -23,7 +23,19 @@ Rosa does have something lenders want: a steady flow of daily sales. YAFI turns 
 1. **The lender grants a microloan** (in the demo: S/ 500 at 10% retention per sale, capped at 30%). The money lands in Rosa's wallet immediately.
 2. **A customer pays Rosa by QR**, as they already do with mobile wallets.
 3. **The smart contract splits each sale in the same transaction:** 90% goes to Rosa instantly and 10% repays her loan. No fixed instalments, no trips to a branch, no cash collection.
-4. **Every sale and repayment is recorded on chain.** That behavioural history (sales count, amount repaid) is the base for bigger loans later, and for a credit record of the informal economy.
+4. **Every sale and repayment is recorded on chain.** That behavioural history (sales count, amount repaid, loans fully repaid) is the base for bigger loans later, and for a credit record of the informal economy.
+
+## Risk controls enforced by the contract (v2)
+
+Three rules that microfinance lenders apply by hand are written into `YafiCreditEscrowV2`, so no admin can skip them:
+
+| Rule | What the contract does | Why lenders use it |
+|---|---|---|
+| **Credit ladder** | The first loan is capped (demo: S/ 500). A new loan is only possible once the current one is fully repaid, and it can be at most 150% of the last one. | Small first loans limit the loss on an unknown borrower; the line grows only with proven repayment. |
+| **No self-payment** | A merchant cannot pay their own QR. | Stops a borrower from cycling their own money to fake a sales history. |
+| **Minimum sale** | Sales below a minimum (demo: S/ 1) are rejected. | Stops dust payments from inflating the sales count used as behavioural history. |
+
+The 150% step and the demo limits are illustrative prototype parameters, not figures taken from a regulator. The cap and the minimum are set at deployment and can be changed by the owner with `setLimits`.
 
 The customer never sees a wallet, a seed phrase or the word "blockchain": the app creates an invisible account in the browser and shows prices in soles.
 
@@ -33,14 +45,16 @@ Everything in this repository was written during the hackathon window (October 2
 
 | Piece | What it does |
 |---|---|
-| `contracts/YafiCreditEscrow.sol` | Escrow that holds the lending treasury, grants loans, and splits every sale between the merchant and the loan repayment. Retention is set in basis points with a hard 30% cap, has a reentrancy guard and owner-only lending. |
-| `test/YafiCreditEscrow.test.js` | 13 Hardhat tests: funding, lending rules, the sale split, never over-collecting, closing the line at 100%, frozen lines, treasury withdrawals and access control. |
-| `app/` | Mobile web app (ES/EN). **Pay Rosa** (customer), **Rosa's view** (live loan balance and sales feed read from contract events) and an **admin panel** (lender, via MetaMask). |
+| `contracts/YafiCreditEscrowV2.sol` | Escrow that holds the lending treasury, grants loans, and splits every sale between the merchant and the loan repayment, plus the three risk controls above. Retention is set in basis points with a hard 30% cap, has a reentrancy guard, owner-only lending and custom errors. |
+| `contracts/YafiCreditEscrow.sol` | The first version (v1), used for the first on-chain test. Same split logic without the risk controls. |
+| `test/` | 31 Hardhat tests: 18 for v2 (the ladder, outstanding loans, self-payment, minimum sale, per-loan progress, the split, never over-collecting, frozen lines, admin controls) and 13 for v1. |
+| `app/` | Mobile web app (ES/EN). **Pay Rosa** (customer), **Rosa's view** (live loan balance, sales feed read from contract events, and the size of her next loan) and an **admin panel** (lender, via MetaMask, showing the credit available to Rosa). The app detects whether the contract is v1 or v2. |
 
 ### Live on Monad Testnet
 
 - Contract: [`0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831`](https://testnet.monadexplorer.com/address/0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831), deployed with Remix (Solidity 0.8.34) and a 5 MON treasury.
 - Demo merchant "Rosa": [`0x44e0C28209F3c2735613b13c3813826A9eeC135D`](https://testnet.monadexplorer.com/address/0x44e0C28209F3c2735613b13c3813826A9eeC135D).
+- This first deployment is v1. The v2 contract with the risk controls is tested locally (31 tests passing) and will replace it on Monad Testnet.
 - On-chain proof: a 0.5 MON loan (S/ 500 at the demo rate) was granted to Rosa, then a S/ 10 sale left her debt at S/ 499, with 1 sale recorded. All transactions are listed on the contract's explorer page.
 
 ## Try it (judges)
@@ -94,7 +108,7 @@ Two Monad specifics shaped the design ([Monad docs: differences from Ethereum](h
  └──────────────────────────┘
 ```
 
-- **Contract:** holds the treasury, the per-merchant record (`creditBalance`, `totalGranted`, `totalRepaid`, `salesCount`, `retentionBps`, `isActive`) and the split logic. `previewSale` shows the split before paying.
+- **Contract:** holds the treasury, the per-merchant record (`creditBalance`, `currentLoan`, `totalGranted`, `totalRepaid`, `salesCount`, `loansRepaid`, `retentionBps`, `isActive`) and the split logic. `previewSale` shows the split before paying and `creditLimit` shows how much a merchant can borrow now.
 - **Frontend:** static HTML, CSS and JavaScript with no build step and no backend. It talks to the public Monad RPC through ethers.js.
 
 ## Tech stack
@@ -109,14 +123,14 @@ Requirements: Node.js 18+ and npm.
 git clone https://github.com/judiweb3-cmd/yafi
 cd yafi
 npm install
-npx hardhat test          # 13 passing
+npx hardhat test          # 31 passing
 ```
 
-**Deploy your own contract (optional).** Either paste `contracts/YafiCreditEscrow.sol` into [Remix](https://remix.ethereum.org), compile with 0.8.34 and deploy with MetaMask on Monad Testnet, or use Hardhat:
+**Deploy your own contract (optional).** Either paste `contracts/YafiCreditEscrowV2.sol` into [Remix](https://remix.ethereum.org), compile with 0.8.34 and deploy with MetaMask on Monad Testnet with the constructor arguments `_firstLoanCap = 500000000000000000` (0.5 MON) and `_minSaleAmount = 1000000000000000` (0.001 MON), or use Hardhat:
 
 ```bash
 cp .env.example .env      # add the PRIVATE_KEY of a testnet-only wallet
-INITIAL_TREASURY=1 npm run deploy:testnet
+INITIAL_TREASURY=1 npm run deploy:testnet          # v2; VERSION=1 deploys v1
 ```
 
 Then call `grantCredit(merchant, amountInWei, retentionBps)` from the owner account, for example `grantCredit(<merchant>, 500000000000000000, 1000)` for 0.5 MON at 10%.
@@ -131,7 +145,9 @@ Routes: `#/` home, `#/pagar` pay Rosa, `#/rosa` merchant view, `#/admin` lender 
 
 ## Contract error messages
 
-The contract's comments and error messages are in Spanish, for the target market. The deployed source must match this file exactly for explorer verification, so it is published unchanged. Translations:
+v2 uses Solidity custom errors with English names (`SaleBelowMinimum`, `SelfPayment`, `OutstandingLoan`, `AboveCreditLimit`, `NotOwner`, `InsufficientTreasury`, `RetentionOutOfRange`...), and the app turns them into plain messages in Spanish or English.
+
+The v1 contract's comments and error messages are in Spanish, for the target market. The deployed source must match this file exactly for explorer verification, so it is published unchanged. Translations:
 
 | Message | Meaning |
 |---|---|
@@ -151,16 +167,15 @@ The contract's comments and error messages are in Spanish, for the target market
 - This is a **testnet prototype**: test MON stands in for soles at a demo rate of 1 sol = 0.001 MON.
 - A single admin sets loans and retention; there is no automated scoring yet.
 - The invisible customer account stores its key in the browser's localStorage, which is acceptable for testnet only.
-- The contract has not been audited. An independent code review before submission found these contract-level limits, which would need a new deployment to change:
-  - `processSale` accepts any amount, so dust or self-paid sales could inflate `salesCount`. A production version needs a minimum sale amount and scoring based on repaid value, not sale count.
-  - `totalGranted` and `repaymentProgressBps` add up across loans, so a second loan to the same merchant mixes old and new progress.
+- The contracts have not been audited. An independent code review of v1 found three contract-level limits. v2 fixes two of them: dust and self-paid sales can no longer inflate `salesCount`, and repayment progress is measured per loan. The third remains:
   - A customer can still pay the merchant outside the contract; repayment only happens on sales that go through YAFI.
+- The self-payment block stops a merchant from paying from their own account, not from a second account they control. Scoring in production should weigh repaid value and many distinct payers, not only the sales count.
 - Monad's reserve-balance rule means a low-balance customer account can only pay if it sent no other transaction in the last 3 blocks, so the app spaces back-to-back payments by about 2.5 seconds.
 - YAFI is not a bank and does not take deposits. In Peru, taking deposits from the public requires authorisation from the banking regulator, the SBS (art. 11, Law 26702).
 
 ## Roadmap
 
-- Credit tiers that reward on-time behaviour with better rates or bigger lines.
+- A risk engine on top of the v2 ladder: rates and line sizes that react to repayment speed and to how sales evolve.
 - Independent informal workers paid daily or weekly (not only merchants).
 - Partnerships with regulated lenders and municipal savings banks that would use the behavioural history.
 - Savings with yield only through a licensed partner.

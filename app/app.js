@@ -14,23 +14,65 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* no storage available */ } }
   };
 
+  // Works with both deployed versions: v2 adds the credit ladder, the self-payment block and
+  // a minimum sale, and returns a longer merchant record. The version is detected on chain.
   const ABI = [
     "function owner() view returns (address)",
     "function treasury() view returns (uint256)",
-    "function merchants(address) view returns (uint256 creditBalance, uint256 totalGranted, uint256 totalRepaid, uint256 salesCount, uint16 retentionBps, bool isActive)",
+    "function merchants(address) view returns (uint256 creditBalance, uint256 currentLoan, uint256 totalGranted, uint256 totalRepaid, uint256 salesCount, uint32 loansRepaid, uint16 retentionBps, bool isActive)",
+    "function creditLimit(address merchant) view returns (uint256)",
+    "function firstLoanCap() view returns (uint256)",
+    "function minSaleAmount() view returns (uint256)",
     "function previewSale(address merchant, uint256 amount) view returns (uint256 retained, uint256 netToMerchant)",
     "function repaymentProgressBps(address merchant) view returns (uint256)",
     "function processSale(address merchant) payable",
     "function grantCredit(address merchant, uint256 amount, uint16 retentionBps)",
     "function fundTreasury() payable",
     "event SaleProcessed(address indexed merchant, address indexed payer, uint256 amount, uint256 retained, uint256 netToMerchant)",
-    "event CreditFullyRepaid(address indexed merchant, uint256 totalRepaid)"
+    "event CreditFullyRepaid(address indexed merchant, uint256 totalRepaid)",
+    "error NotOwner()",
+    "error Reentrancy()",
+    "error ZeroAddress()",
+    "error ZeroAmount()",
+    "error RetentionOutOfRange()",
+    "error InsufficientTreasury()",
+    "error TransferFailed()",
+    "error OutstandingLoan()",
+    "error AboveCreditLimit(uint256 limit)",
+    "error SelfPayment()",
+    "error SaleBelowMinimum(uint256 minimum)"
+  ];
+  const ABI_V1_MERCHANTS = [
+    "function merchants(address) view returns (uint256 creditBalance, uint256 totalGranted, uint256 totalRepaid, uint256 salesCount, uint16 retentionBps, bool isActive)"
   ];
 
   // No cache (balances change every block) and fast polling: Monad confirms in under a second
   const provider = new ethers.JsonRpcProvider(CFG.rpcUrl, CFG.chainId, { staticNetwork: true, cacheTimeout: -1, pollingInterval: 500 });
   const yafi = new ethers.Contract(CFG.contract, ABI, provider);
+  const yafiV1 = new ethers.Contract(CFG.contract, ABI_V1_MERCHANTS, provider);
   const configured = CFG.contract !== ethers.ZeroAddress && CFG.merchant !== ethers.ZeroAddress;
+
+  // v2 exposes firstLoanCap(); v1 reverts on it. Only a definite answer is cached, so a
+  // network hiccup does not lock the app into the wrong version.
+  let v2Known = null;
+  async function isV2() {
+    if (v2Known !== null) return v2Known;
+    try { await yafi.firstLoanCap(); v2Known = true; } catch (e) {
+      if (e && e.code === "CALL_EXCEPTION") v2Known = false; else throw e;
+    }
+    return v2Known;
+  }
+  // Same shape for both versions; currentLoan is the loan being repaid now.
+  async function readMerchant(addr) {
+    if (await isV2()) {
+      const m = await yafi.merchants(addr);
+      return { creditBalance: m.creditBalance, currentLoan: m.currentLoan, totalGranted: m.totalGranted, totalRepaid: m.totalRepaid,
+        salesCount: m.salesCount, retentionBps: m.retentionBps, isActive: m.isActive, limit: await yafi.creditLimit(addr) };
+    }
+    const m = await yafiV1.merchants(addr);
+    return { creditBalance: m.creditBalance, currentLoan: m.totalGranted, totalGranted: m.totalGranted, totalRepaid: m.totalRepaid,
+      salesCount: m.salesCount, retentionBps: m.retentionBps, isActive: m.isActive, limit: null };
+  }
 
   // ---------- Language ----------
   const T = {
@@ -53,6 +95,7 @@
       paying: "Procesando pago…",
       paidTitle: "¡Pago enviado!",
       paidDetail: "Rosa recibió {net} y {ret} fueron a su préstamo.",
+      paidAll: "Rosa recibió {net} completos.",
       paidTime: "Confirmado en {s} s",
       receipt: "Ver comprobante",
       payAgain: "Pagar otra vez",
@@ -73,6 +116,17 @@
       salesYafi: "Ventas con YAFI", repaid: "Ya pagaste",
       noLoanYet: "Todavía no tienes un préstamo activo.",
       fullyPaid: "¡Préstamo pagado! Tu buen historial ya cuenta para un préstamo mayor.",
+      nextLoan: "Tu próximo préstamo puede ser de hasta {x}.",
+      firstLoan: "Tu primer préstamo puede ser de hasta {x}.",
+      availableLine: "Línea disponible para Rosa: {x}",
+      noLineYet: "Rosa debe terminar de pagar su préstamo actual antes de recibir otro.",
+      errSaleMin: "El pago mínimo es {x}.",
+      errSelfPay: "Un comercio no puede pagarse a sí mismo.",
+      errOutstanding: "Rosa debe terminar de pagar su préstamo actual antes de recibir otro.",
+      errAboveLimit: "El monto supera la línea disponible: {x}.",
+      errNotOwner: "Solo la administradora puede hacer esto.",
+      errTreasury: "La caja no tiene fondos suficientes.",
+      errRetention: "La retención debe estar entre 0.01% y 30%.",
       liveSales: "Ventas en vivo",
       waitingSales: "Esperando ventas… abre «Pagar a Rosa» en otro celular.",
       saleRow: "Venta de {x}",
@@ -113,6 +167,7 @@
       paying: "Processing payment…",
       paidTitle: "Payment sent!",
       paidDetail: "Rosa received {net} and {ret} went to her loan.",
+      paidAll: "Rosa received the full {net}.",
       paidTime: "Confirmed in {s} s",
       receipt: "View receipt",
       payAgain: "Pay again",
@@ -133,6 +188,17 @@
       salesYafi: "Sales with YAFI", repaid: "Repaid so far",
       noLoanYet: "You don't have an active loan yet.",
       fullyPaid: "Loan repaid! Your good record now counts toward a bigger loan.",
+      nextLoan: "Your next loan can be up to {x}.",
+      firstLoan: "Your first loan can be up to {x}.",
+      availableLine: "Credit available to Rosa: {x}",
+      noLineYet: "Rosa must finish repaying her current loan before getting another.",
+      errSaleMin: "The minimum payment is {x}.",
+      errSelfPay: "A merchant cannot pay themselves.",
+      errOutstanding: "Rosa must finish repaying her current loan before getting another.",
+      errAboveLimit: "The amount is above the available credit: {x}.",
+      errNotOwner: "Only the admin can do this.",
+      errTreasury: "The treasury does not have enough funds.",
+      errRetention: "Retention must be between 0.01% and 30%.",
       liveSales: "Live sales",
       waitingSales: "Waiting for sales… open “Pay Rosa” on another phone.",
       saleRow: "Sale of {x}",
@@ -181,9 +247,33 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(() => { el.hidden = true; }, 3500);
   }
+  function decodeRevert(e) {
+    const cands = [e && e.data, e && e.info && e.info.error && e.info.error.data,
+      e && e.info && e.info.error && e.info.error.data && e.info.error.data.data, e && e.error && e.error.data];
+    for (const d of cands) {
+      if (typeof d !== "string" || !/^0x[0-9a-f]{8}/i.test(d)) continue;
+      try { const p = yafi.interface.parseError(d); if (p) return p; } catch (err) { /* not ours */ }
+    }
+    return null;
+  }
   function friendlyError(e) {
     console.error(e);
     const m = (e && (e.shortMessage || e.reason || e.message)) || "";
+    // v2 custom errors. ethers does not always decode them (e.g. when gas estimation
+    // reverts), so the raw revert data is decoded here against the contract ABI.
+    const rv = (e && e.revert) || decodeRevert(e);
+    if (rv && rv.name) {
+      switch (rv.name) {
+        case "SaleBelowMinimum": return t("errSaleMin", { x: soles(rv.args[0]) });
+        case "SelfPayment": return t("errSelfPay");
+        case "OutstandingLoan": return t("errOutstanding");
+        case "AboveCreditLimit": return t("errAboveLimit", { x: soles(rv.args[0]) });
+        case "NotOwner": return t("errNotOwner");
+        case "InsufficientTreasury": return t("errTreasury");
+        case "RetentionOutOfRange": return t("errRetention");
+      }
+    }
+    // v1 revert strings
     const yafiMsg = m.match(/YAFI: [^"']+/);
     if (yafiMsg) return yafiMsg[0];
     if (e && e.code === "WRONG_NETWORK") return t("wrongNetwork");
@@ -358,7 +448,9 @@
       <section class="card done">
         <div class="check">✓</div>
         <h2>${t("paidTitle")}</h2>
-        <p>${t("paidDetail", { net: "<b>" + soles(net) + "</b>", ret: "<b class='grad-text'>" + soles(retained) + "</b>" })}</p>
+        <p>${retained > 0n
+          ? t("paidDetail", { net: "<b>" + soles(net) + "</b>", ret: "<b class='grad-text'>" + soles(retained) + "</b>" })
+          : t("paidAll", { net: "<b>" + soles(net) + "</b>" })}</p>
         <p><span class="badge">⚡ ${t("paidTime", { s: secs })}</span></p>
         <p class="small"><a href="${CFG.explorer}/tx/${hash}" target="_blank" rel="noopener">${t("receipt")}</a></p>
       </section>
@@ -446,21 +538,24 @@
     const el = document.getElementById("loan");
     if (!el) return;
     try {
-      const m = await yafi.merchants(CFG.merchant);
+      const m = await readMerchant(CFG.merchant);
       const pct = Number(await yafi.repaymentProgressBps(CFG.merchant)) / 100;
       if (m.totalGranted === 0n) {
-        el.innerHTML = `<p class="muted">${t("noLoanYet")}</p>`;
+        const first = m.limit ? `<p class="small">${t("firstLoan", { x: soles(m.limit) })}</p>` : "";
+        el.innerHTML = `<p class="muted">${t("noLoanYet")}</p>${first}`;
         return;
       }
+      // Credit ladder (v2): once repaid, show how big the next loan can be
+      const next = m.limit ? `<p class="small">${t("nextLoan", { x: "<b>" + soles(m.limit) + "</b>" })}</p>` : "";
       const top = m.creditBalance === 0n
-        ? `<p><span class="badge">🎉 ${t("fullyPaid")}</span></p>`
+        ? `<p><span class="badge">🎉 ${t("fullyPaid")}</span></p>${next}`
         : `<div class="label">${t("owe")}</div><div class="big">${soles(m.creditBalance)}</div>`;
       el.innerHTML = `
         ${top}
         <div class="bar"><span style="width:${Math.min(100, pct)}%"></span></div>
         <div class="row small" style="display:flex;justify-content:space-between">
           <span class="grad-text" style="font-weight:700">${t("paidPct", { p: pct.toFixed(1) })}</span>
-          <span class="muted">${t("loanOf", { x: soles(m.totalGranted), r: (Number(m.retentionBps) / 100).toFixed(0) })}</span>
+          <span class="muted">${t("loanOf", { x: soles(m.currentLoan), r: (Number(m.retentionBps) / 100).toFixed(0) })}</span>
         </div>
         <div class="stats" style="margin-top:14px">
           <div class="stat"><span class="muted small">${t("salesYafi")}</span><b>${m.salesCount}</b></div>
@@ -521,6 +616,7 @@
       </section>
       <section class="card">
         <h2>${t("grantTitle")}</h2>
+        <p class="muted small" id="line"></p>
         <label class="field"><span>${t("amountSoles")}</span><input id="gAmt" type="number" min="1" value="500" /></label>
         <label class="field"><span>${t("retention")}</span><input id="gRet" type="number" min="1" max="30" value="10" /></label>
         <button class="btn btn-secondary" id="grantBtn" type="button">${t("grantBtn")}</button>
@@ -533,7 +629,18 @@
     const showTreasury = async () => {
       try { const tr = await yafi.treasury(); document.getElementById("treas").textContent = soles(tr) + "  (" + ethers.formatEther(tr) + " MON)"; } catch (e) { /* contract not reachable yet */ }
     };
+    // Credit ladder (v2): show how much Rosa can borrow now
+    const showLine = async () => {
+      try {
+        const m = await readMerchant(CFG.merchant);
+        const el = document.getElementById("line");
+        if (!el || m.limit === null) return;
+        el.textContent = m.limit > 0n ? t("availableLine", { x: soles(m.limit) }) : t("noLineYet");
+        if (m.limit > 0n) document.getElementById("gAmt").value = Math.floor(Number(ethers.formatEther(m.limit)) / CFG.monPerSol);
+      } catch (e) { /* contract not reachable yet */ }
+    };
     showTreasury();
+    showLine();
     document.getElementById("connectBtn").addEventListener("click", async () => {
       try {
         adminSigner = await connectWallet();
@@ -546,7 +653,7 @@
       const label = b.textContent;
       b.disabled = true;
       b.innerHTML = `<span class="spinner"></span>${label}`;
-      try { const tx = await fn(); await tx.wait(); toast(t("done")); showTreasury(); }
+      try { const tx = await fn(); await tx.wait(); toast(t("done")); showTreasury(); showLine(); }
       catch (e) { toast(friendlyError(e)); }
       finally { b.disabled = false; b.textContent = label; }
     };

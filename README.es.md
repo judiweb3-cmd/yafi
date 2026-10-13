@@ -23,7 +23,19 @@ Rosa sí tiene algo que a un prestamista le interesa: un flujo constante de vent
 1. **El prestamista otorga un microcrédito** (en la demo: S/ 500 con 10% de retención por venta, tope de 30%). El dinero llega al instante a la billetera de Rosa.
 2. **Un cliente le paga a Rosa con QR**, como ya lo hace con las billeteras móviles.
 3. **El contrato inteligente divide cada venta en la misma transacción:** el 90% le llega a Rosa al instante y el 10% paga su préstamo. Sin cuotas fijas, sin ir a una agencia y sin cobradores.
-4. **Cada venta y cada pago quedan registrados en la cadena.** Ese historial de comportamiento (número de ventas, monto pagado) es la base para préstamos más grandes y para un historial crediticio de la economía informal.
+4. **Cada venta y cada pago quedan registrados en la cadena.** Ese historial de comportamiento (número de ventas, monto pagado, préstamos pagados por completo) es la base para préstamos más grandes y para un historial crediticio de la economía informal.
+
+## Controles de riesgo que el contrato hace cumplir (v2)
+
+Tres reglas que las microfinancieras aplican a mano están escritas en `YafiCreditEscrowV2`, así que ningún administrador puede saltárselas:
+
+| Regla | Qué hace el contrato | Por qué la usan los prestamistas |
+|---|---|---|
+| **Escalera de crédito** | El primer préstamo tiene tope (demo: S/ 500). Solo se puede dar uno nuevo cuando el actual está pagado por completo, y como máximo por el 150% del anterior. | Un primer préstamo pequeño limita la pérdida con un cliente nuevo; la línea crece solo con pagos demostrados. |
+| **Sin autopago** | Un comerciante no puede pagar su propio QR. | Evita que alguien haga circular su propio dinero para fingir un historial de ventas. |
+| **Venta mínima** | Se rechazan ventas por debajo de un mínimo (demo: S/ 1). | Evita que pagos diminutos inflen el número de ventas que se usa como historial. |
+
+El paso de 150% y los límites de la demo son parámetros ilustrativos del prototipo, no cifras de un regulador. El tope y el mínimo se fijan al desplegar y el administrador puede cambiarlos con `setLimits`.
 
 El cliente nunca ve una billetera, unas palabras secretas ni la palabra "blockchain": la app crea una cuenta invisible en el navegador y muestra los precios en soles.
 
@@ -33,14 +45,16 @@ Todo el código de este repositorio se escribió durante el hackathon (octubre d
 
 | Pieza | Qué hace |
 |---|---|
-| `contracts/YafiCreditEscrow.sol` | Escrow que guarda la caja de préstamos, otorga créditos y divide cada venta entre el comerciante y el pago del préstamo. Retención en puntos básicos con tope de 30%, protección anti-reentrada y solo el administrador puede prestar. |
-| `test/YafiCreditEscrow.test.js` | 13 pruebas en Hardhat: fondeo, reglas de préstamo, división de la venta, nunca cobrar de más, cierre de la línea al 100%, líneas congeladas, retiros de caja y control de acceso. |
-| `app/` | App web móvil (ES/EN). **Pagar a Rosa** (cliente), **Vista de Rosa** (saldo del préstamo y ventas en vivo, leídos de los eventos del contrato) y **panel de administración** (prestamista, con MetaMask). |
+| `contracts/YafiCreditEscrowV2.sol` | Escrow que guarda la caja de préstamos, otorga créditos y divide cada venta entre el comerciante y el pago del préstamo, más los tres controles de riesgo de arriba. Retención en puntos básicos con tope de 30%, protección anti-reentrada, solo el administrador puede prestar y errores personalizados. |
+| `contracts/YafiCreditEscrow.sol` | La primera versión (v1), usada en la primera prueba en la cadena. Misma división, sin los controles de riesgo. |
+| `test/` | 31 pruebas en Hardhat: 18 para v2 (escalera, préstamo pendiente, autopago, venta mínima, avance por préstamo, división, nunca cobrar de más, líneas congeladas, controles del administrador) y 13 para v1. |
+| `app/` | App web móvil (ES/EN). **Pagar a Rosa** (cliente), **Vista de Rosa** (saldo del préstamo, ventas en vivo leídas de los eventos del contrato y el tamaño de su próximo préstamo) y **panel de administración** (prestamista, con MetaMask, con la línea disponible para Rosa). La app detecta si el contrato es v1 o v2. |
 
 ### En vivo en Monad Testnet
 
 - Contrato: [`0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831`](https://testnet.monadexplorer.com/address/0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831), desplegado con Remix (Solidity 0.8.34) con una caja de 5 MON.
 - Comerciante de la demo, "Rosa": [`0x44e0C28209F3c2735613b13c3813826A9eeC135D`](https://testnet.monadexplorer.com/address/0x44e0C28209F3c2735613b13c3813826A9eeC135D).
+- Este primer despliegue es el v1. El contrato v2 con los controles de riesgo está probado localmente (31 pruebas en verde) y lo reemplazará en Monad Testnet.
 - Prueba en la cadena: se le otorgó a Rosa un préstamo de 0.5 MON (S/ 500 al tipo de cambio de la demo), y luego una venta de S/ 10 dejó su deuda en S/ 499, con 1 venta registrada. Todas las transacciones se ven en la página del contrato en el explorador.
 
 ## Pruébalo (jueces)
@@ -75,7 +89,7 @@ Dos particularidades de Monad guiaron el diseño ([documentación de Monad: dife
 
 Ver el diagrama en el [README en inglés](README.md#architecture).
 
-- **Contrato:** guarda la caja, el registro de cada comerciante (`creditBalance`, `totalGranted`, `totalRepaid`, `salesCount`, `retentionBps`, `isActive`) y la lógica de división. `previewSale` muestra la división antes de pagar.
+- **Contrato:** guarda la caja, el registro de cada comerciante (`creditBalance`, `currentLoan`, `totalGranted`, `totalRepaid`, `salesCount`, `loansRepaid`, `retentionBps`, `isActive`) y la lógica de división. `previewSale` muestra la división antes de pagar y `creditLimit` muestra cuánto puede pedir prestado un comerciante ahora.
 - **Frontend:** HTML, CSS y JavaScript estáticos, sin compilación ni servidor propio. Se conecta al RPC público de Monad con ethers.js.
 
 ## Tecnologías
@@ -90,7 +104,7 @@ Requisitos: Node.js 18+ y npm.
 git clone https://github.com/judiweb3-cmd/yafi
 cd yafi
 npm install
-npx hardhat test          # 13 pruebas en verde
+npx hardhat test          # 31 pruebas en verde
 ```
 
 Para desplegar tu propio contrato, para la app local y para la tabla de mensajes de error, ver las secciones correspondientes del [README en inglés](README.md#run-it-yourself).
@@ -100,16 +114,15 @@ Para desplegar tu propio contrato, para la app local y para la tabla de mensajes
 - Es un **prototipo en testnet**: el MON de prueba representa soles con una tasa de demo de 1 sol = 0.001 MON.
 - Un solo administrador define préstamos y retención; todavía no hay scoring automático.
 - La cuenta invisible del cliente guarda su clave en el navegador (localStorage), aceptable solo en testnet.
-- El contrato no ha sido auditado. Una revisión independiente del código antes de la entrega encontró estos límites del contrato, que requerirían un nuevo despliegue:
-  - `processSale` acepta cualquier monto, así que ventas mínimas o pagadas por el propio comerciante podrían inflar `salesCount`. Una versión de producción necesita un monto mínimo por venta y un scoring basado en lo pagado, no en el número de ventas.
-  - `totalGranted` y `repaymentProgressBps` se acumulan entre préstamos, así que un segundo préstamo al mismo comerciante mezcla el avance del anterior.
+- Los contratos no han sido auditados. Una revisión independiente del v1 encontró tres límites del contrato. El v2 corrige dos: las ventas diminutas o autopagadas ya no inflan `salesCount`, y el avance del pago se mide por préstamo. Queda el tercero:
   - Un cliente todavía puede pagarle al comerciante por fuera del contrato; la retención solo ocurre en las ventas que pasan por YAFI.
+- El bloqueo de autopago impide que el comerciante pague desde su propia cuenta, no desde una segunda cuenta que controle. En producción, el scoring debería pesar el monto pagado y muchos pagadores distintos, no solo el número de ventas.
 - Por la regla de saldo de reserva de Monad, una cuenta de cliente con poco saldo solo puede pagar si no envió otra transacción en los últimos 3 bloques, así que la app espacia los pagos seguidos unos 2.5 segundos.
 - YAFI no es un banco y no capta depósitos. En Perú, captar ahorro del público requiere autorización de la SBS (art. 11, Ley 26702).
 
 ## Hoja de ruta
 
-- Niveles de crédito que premian el pago puntual con mejores tasas o líneas más grandes.
+- Un motor de riesgo sobre la escalera del v2: tasas y tamaños de línea que respondan a la velocidad de pago y a la evolución de las ventas.
 - Trabajadores independientes informales que cobran diario o semanal, no solo comerciantes.
 - Alianzas con entidades reguladas y cajas municipales que usen el historial de comportamiento.
 - Ahorro con rendimiento solo a través de un aliado con licencia.
