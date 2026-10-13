@@ -97,6 +97,8 @@
       scanDemo: "Demo: simulamos el escaneo del QR de Rosa.",
       scanFound: "QR detectado",
       newSale: "¡Nueva venta!",
+      soundOn: "🔔 Activar sonido de ventas",
+      soundReady: "🔔 Sonido activado",
       sessionTotal: "Recibiste en esta sesión",
       salesN: "{n} ventas",
       verified: "Comercio verificado",
@@ -104,6 +106,7 @@
       range: "Monto entre {min} y {max}.",
       paidTo: "Pagaste a",
       opNumber: "N° de operación",
+      opShort: "Op.",
       date: "Fecha",
       preparing: "Conectando de forma segura…",
       paying: "Procesando pago…",
@@ -183,6 +186,8 @@
       scanDemo: "Demo: we simulate scanning Rosa's QR code.",
       scanFound: "QR found",
       newSale: "New sale!",
+      soundOn: "🔔 Turn on sale sounds",
+      soundReady: "🔔 Sounds on",
       sessionTotal: "Received this session",
       salesN: "{n} sales",
       verified: "Verified merchant",
@@ -190,6 +195,7 @@
       range: "Amount between {min} and {max}.",
       paidTo: "You paid",
       opNumber: "Operation no.",
+      opShort: "Op.",
       date: "Date",
       preparing: "Connecting securely…",
       paying: "Processing payment…",
@@ -409,6 +415,11 @@
       </section>`;
   }
 
+  // Short operation number shown on both the customer's receipt and Rosa's screen, so she can
+  // match a payment to a customer without collecting names.
+  const opNumber = (hash) => hash.slice(2, 10).toUpperCase();
+  const fmtWhen = (ms) => new Date(ms).toLocaleString(lang === "es" ? "es-PE" : "en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
   // Simulated QR scan, so the demo follows the same steps as a real mobile-wallet payment
   function renderScan() {
     if (!configured) return notConfigured();
@@ -587,7 +598,7 @@
   function renderPaid(sol, rcpt, secs, hash) {
     const { retained, net } = splitFromReceipt(rcpt, weiFromSoles(sol));
     const when = new Date().toLocaleString(lang === "es" ? "es-PE" : "en-US", { dateStyle: "medium", timeStyle: "short" });
-    const opNum = hash.slice(2, 10).toUpperCase(); // short, human operation number
+    const opNum = opNumber(hash);
     view().innerHTML = `
       <section class="receipt">
         <svg class="check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-15"/></svg>
@@ -659,19 +670,11 @@
   let fromBlock = null;
   let feedPrimed = false; // no alert for sales already on chain when the view opens
 
-  // Celebrate each new sale the way payment apps do: banner, short vibration and a beep
-  function saleAlert(f) {
-    const el = document.getElementById("saleAlert");
-    if (!el) return;
-    el.innerHTML = `<b>${t("newSale")}</b><span>+${soles(f.amount - f.retained)}</span>`;
-    el.hidden = false;
-    el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
-    clearTimeout(saleAlert._t);
-    saleAlert._t = setTimeout(() => { el.hidden = true; }, 3500);
-    if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+  // "Cha-ching": a few falling-coin pings and a register bell, synthesized (no audio files)
+  function playChaChing() {
+    const ctx = saleAlert.ctx;
+    if (!ctx) return; // sound stays off until Rosa taps the sound button
     try {
-      // "Cha-ching": a few falling-coin pings and a register bell, synthesized (no audio files)
-      const ctx = saleAlert.ctx || (saleAlert.ctx = new (window.AudioContext || window.webkitAudioContext)());
       const ping = (hz, at, dur, vol, type) => {
         const o = ctx.createOscillator(), g = ctx.createGain();
         o.type = type; o.frequency.value = hz; o.connect(g); g.connect(ctx.destination);
@@ -681,7 +684,23 @@
       };
       [0, 0.07, 0.13, 0.18, 0.22].forEach((at, i) => ping(2400 + i * 180, at, 0.09, 0.08, "triangle"));
       [1568, 2093, 3136].forEach((hz) => ping(hz, 0.3, 0.6, 0.09, "sine"));
-    } catch (e) { /* audio not allowed until the user interacts */ }
+    } catch (e) { /* audio not available */ }
+  }
+
+  // Celebrate each new sale the way payment apps do: banner, short vibration and the register sound
+  function saleAlert(f) {
+    const el = document.getElementById("saleAlert");
+    if (!el) return;
+    el.innerHTML = `
+      <img src="logo.png" alt="" width="36" height="36" />
+      <div class="sa-text"><b>YAFI · ${t("newSale")}</b><small>${esc(fmtWhen(f.at))} · ${t("opShort")} ${f.op}</small></div>
+      <span class="sa-amt">+${soles(f.amount - f.retained)}</span>`;
+    el.hidden = false;
+    el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+    clearTimeout(saleAlert._t);
+    saleAlert._t = setTimeout(() => { el.hidden = true; }, 3500);
+    if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+    playChaChing();
   }
 
   async function renderRosa() {
@@ -692,6 +711,7 @@
         <div class="merchant-head"><div class="avatar">🥪</div><div><div class="name">${t("hello")}</div><div class="sub">${t("shopSub")}</div></div></div>
         <div id="loan" style="margin-top:18px"><span class="spinner"></span></div>
       </section>
+      <button class="btn btn-secondary sound-btn" id="soundBtn" type="button">${saleAlert.ctx ? t("soundReady") : t("soundOn")}</button>
       <section class="card">
         <div class="session" id="session"></div>
         <h2>${t("liveSales")}</h2>
@@ -699,6 +719,15 @@
       </section>
       <div class="sale-alert" id="saleAlert" hidden></div>`;
     feedPrimed = false;
+    document.getElementById("soundBtn").addEventListener("click", (ev) => {
+      // Browsers only allow sound after a tap: create and unlock the audio context here
+      try {
+        saleAlert.ctx = saleAlert.ctx || new (window.AudioContext || window.webkitAudioContext)();
+        saleAlert.ctx.resume();
+        playChaChing();
+      } catch (e) { /* no audio support */ }
+      ev.target.textContent = t("soundReady");
+    });
     renderFeed();
     await refreshLoan();
     await pollSales();
@@ -752,7 +781,7 @@
         const id = l.transactionHash + ":" + l.index;
         if (seen.has(id)) continue;
         seen.add(id);
-        feedItems.unshift({ amount: l.args.amount, retained: l.args.retained, at: Date.now(), fresh: true });
+        feedItems.unshift({ amount: l.args.amount, retained: l.args.retained, at: Date.now(), op: opNumber(l.transactionHash), fresh: true });
         added = true;
       }
       feedItems = feedItems.slice(0, 15);
@@ -779,7 +808,7 @@
     if (!feedItems.length) { el.innerHTML = `<li class="muted small">${t("waitingSales")}</li>`; return; }
     el.innerHTML = feedItems.map((f) => `
       <li class="${f.fresh ? "new" : ""}">
-        <span>${t("saleRow", { x: soles(f.amount) })} <span class="muted small">· ${new Date(f.at).toLocaleTimeString(lang === "es" ? "es-PE" : "en-US", { hour: "2-digit", minute: "2-digit" })}</span><br /><span class="loan">${t("saleLoan", { x: soles(f.retained) })}</span></span>
+        <span>${t("saleRow", { x: soles(f.amount) })}<br /><span class="muted small">${esc(fmtWhen(f.at))} · ${t("opShort")} ${f.op}</span><br /><span class="loan">${t("saleLoan", { x: soles(f.retained) })}</span></span>
         <span class="amt">+${soles(f.amount - f.retained)}</span>
       </li>`).join("");
     feedItems.forEach((f) => { f.fresh = false; });

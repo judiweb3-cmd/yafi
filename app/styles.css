@@ -165,7 +165,14 @@ h2 { font-size: 20px; margin: 4px 0 12px; }
 .session-total { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--green); }
 .sale-alert { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); width: calc(100% - 32px); max-width: 408px; background: var(--green); color: #0D0A1A; border-radius: 16px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; font-size: 18px; box-shadow: 0 12px 30px rgba(74, 222, 128, .35); z-index: 20; }
 .sale-alert[hidden] { display: none; }
-.sale-alert span { font-weight: 800; font-variant-numeric: tabular-nums; }
+.sale-alert { gap: 12px; padding: 12px 14px; }
+.sale-alert img { border-radius: 10px; flex: none; background: #0D0A1A; }
+.sa-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.sa-text b { font-size: 16px; }
+.sa-text small { font-size: 12px; opacity: .8; }
+.sa-amt { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 19px; white-space: nowrap; }
+.sound-btn { margin-bottom: 14px; padding: 12px; font-size: 15px; }
 .sale-alert.show { animation: drop .35s ease; }
 @keyframes drop { from { transform: translate(-50%, -30px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .scan-line, .sale-alert.show { animation: none; } }
+.feed .amt { white-space: nowrap; }
