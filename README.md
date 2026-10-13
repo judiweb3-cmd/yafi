@@ -1,4 +1,6 @@
-# YAFI · Your sales are your credit
+# YAFI · Finance NOW!
+
+**Collect, grow and pay right from your phone.** Your sales are your credit.
 
 > A payments app that never mentions blockchain. Every QR sale an informal merchant receives automatically repays a small microloan on **Monad**, and builds the credit history they never had.
 

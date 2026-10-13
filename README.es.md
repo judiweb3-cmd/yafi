@@ -1,4 +1,6 @@
-# YAFI · Tus ventas son tu crédito
+# YAFI · ¡Finanzas YA!
+
+**Cobra, crece y paga desde tu celular.** Tus ventas son tu crédito.
 
 > Una app de pagos que nunca menciona la blockchain. Cada venta por QR que recibe un comerciante informal paga automáticamente un pequeño microcrédito en **Monad**, y construye el historial crediticio que nunca tuvo.
 

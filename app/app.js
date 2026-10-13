@@ -78,8 +78,9 @@
   const T = {
     es: {
       footer: "Demo · montos de prueba, no es dinero real",
-      heroTitle: "Tus ventas son tu crédito",
-      heroLead: "Microcrédito para comerciantes que se paga solo: una pequeña parte de cada venta abona al préstamo.",
+      heroTitle: "¡Finanzas YA!",
+      heroSlogan: "Cobra, crece y paga desde tu celular.",
+      heroLead: "Tus ventas son tu crédito: una pequeña parte de cada venta paga tu préstamo, sola.",
       howTitle: "Cómo funciona",
       how1: "Rosa vende desayunos en Piura y recibe un préstamo de YAFI.",
       how2: "Cada cliente le paga con el celular, como siempre.",
@@ -157,8 +158,9 @@
     },
     en: {
       footer: "Demo · test amounts, not real money",
-      heroTitle: "Your sales are your credit",
-      heroLead: "Microcredit for merchants that repays itself: a small part of every sale goes to the loan.",
+      heroTitle: "Finance NOW!",
+      heroSlogan: "Collect, grow and pay right from your phone.",
+      heroLead: "Your sales are your credit: a small part of every sale repays your loan, automatically.",
       howTitle: "How it works",
       how1: "Rosa sells breakfast in Piura, Peru, and gets a loan from YAFI.",
       how2: "Each customer pays her by phone, as usual.",
@@ -380,6 +382,7 @@
     view().innerHTML = `
       <section class="card hero">
         <h1><span class="grad-text">${t("heroTitle")}</span></h1>
+        <p class="slogan">${t("heroSlogan")}</p>
         <p class="lead">${t("heroLead")}</p>
         <a class="btn btn-primary role-btn" href="#/pagar"><span class="ico">📱</span><span>${t("asCustomer")}<small>${t("asCustomerSub")}</small></span></a>
         <a class="btn btn-secondary role-btn" href="#/rosa"><span class="ico">🥪</span><span>${t("asMerchant")}<small>${t("asMerchantSub")}</small></span></a>

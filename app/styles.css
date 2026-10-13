@@ -147,3 +147,4 @@ h2 { font-size: 20px; margin: 4px 0 12px; }
 @keyframes rise { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 .big-ico { font-size: 44px; }
 @media (prefers-reduced-motion: reduce) { .check circle, .check path { animation: none; stroke-dashoffset: 0; } .receipt { animation: none; } }
+.slogan { font-size: 18px; font-weight: 700; margin: 0 0 10px; }
