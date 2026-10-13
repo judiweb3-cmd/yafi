@@ -191,6 +191,9 @@ Peru has no crypto-specific law, so YAFI is designed to fit rules that already e
 - Independent informal workers paid daily or weekly (not only merchants).
 - Partnerships with regulated lenders and municipal savings banks that would use the behavioural history.
 - Savings with yield only through a licensed partner.
+- Alerts for days without repayments, in tiers of 3–7, 8–15, 15–30 and 30+ days, read from `lastRepaymentAt`. Messages are sent only with the merchant's consent and never outside the hours Peruvian consumer law allows.
+- Payments in soles. A sol-denominated ledger avoids lending dollars to merchants who earn soles, which would add currency risk.
+- Production security: a multisig admin key with a time delay, and an allowlist so only licensed payment providers can submit sales.
 
 ## Attribution
 

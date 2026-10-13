@@ -138,6 +138,9 @@ Perú no tiene una ley cripto, así que YAFI se diseñó para encajar en normas 
 - Trabajadores independientes informales que cobran diario o semanal, no solo comerciantes.
 - Alianzas con entidades reguladas y cajas municipales que usen el historial de comportamiento.
 - Ahorro con rendimiento solo a través de un aliado con licencia.
+- Alertas por días sin abonos, en tramos de 3–7, 8–15, 15–30 y 30+ días, leídos de `lastRepaymentAt`. Los mensajes se envían solo con consentimiento del comerciante y nunca fuera del horario que permite la ley de protección al consumidor.
+- Pagos en soles. Un registro en soles evita prestar en dólares a comerciantes que ganan en soles, lo que sumaría riesgo cambiario.
+- Seguridad para producción: llave admin multifirma con tiempo de espera, y una lista de proveedores de pago con licencia que son los únicos que pueden registrar ventas.
 
 ## Créditos
 
