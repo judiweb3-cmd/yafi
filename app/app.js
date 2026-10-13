@@ -764,7 +764,10 @@
   function spokenSoles(wei) {
     const cents = Math.round(Number(ethers.formatEther(wei)) / CFG.monPerSol * 100);
     const s = Math.floor(cents / 100), c = cents % 100;
-    if (lang !== "es") return (cents / 100).toFixed(2) + " soles";
+    if (lang !== "es") { // "4.50 soles" can be misread by English voices; say it in words
+      const w = s === 1 ? "1 sol" : s + " soles";
+      return !c ? w : s ? w + " and " + c + " cents" : c + " cents";
+    }
     const whole = s === 1 ? "1 sol" : s + " soles";
     if (!c) return whole;
     return s ? whole + " con " + c + " céntimos" : c + " céntimos";
