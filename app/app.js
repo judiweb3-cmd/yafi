@@ -61,6 +61,9 @@
       needFundsHelp: "Pásale este código al equipo de YAFI para que te envíe saldo de prueba:",
       copy: "Copiar código", copied: "Copiado",
       noWallet: "No encontramos MetaMask en este navegador.",
+      wrongNetwork: "Cambia MetaMask a la red Monad Testnet e inténtalo de nuevo.",
+      waitMoment: "Espera un segundo y vuelve a intentarlo.",
+      lowFunds: "Saldo de prueba insuficiente para este pago.",
       orWallet: "¿Tienes MetaMask con MON de prueba? Paga directo desde tu billetera:",
       payWallet: "Pagar {x} con mi billetera",
       hello: "Hola, Rosa",
@@ -118,6 +121,9 @@
       needFundsHelp: "Send this code to the YAFI team so they can send you test funds:",
       copy: "Copy code", copied: "Copied",
       noWallet: "MetaMask was not found in this browser.",
+      wrongNetwork: "Switch MetaMask to the Monad Testnet network and try again.",
+      waitMoment: "Wait a second and try again.",
+      lowFunds: "Not enough test balance for this payment.",
       orWallet: "Have MetaMask with testnet MON? Pay straight from your wallet:",
       payWallet: "Pay {x} with my wallet",
       hello: "Hi, Rosa",
@@ -179,7 +185,11 @@
     console.error(e);
     const m = (e && (e.shortMessage || e.reason || e.message)) || "";
     const yafiMsg = m.match(/YAFI: [^"']+/);
-    return yafiMsg ? yafiMsg[0] : t("error");
+    if (yafiMsg) return yafiMsg[0];
+    if (e && e.code === "WRONG_NETWORK") return t("wrongNetwork");
+    if (/insufficient funds/i.test(m)) return t("lowFunds");
+    if (e && e.code === "CALL_EXCEPTION") return t("waitMoment"); // e.g. Monad reserve-balance revert
+    return t("error");
   }
 
   // ---------- Invisible customer account ----------
@@ -205,6 +215,39 @@
     const tx = await sponsor.sendTransaction({ to: c.address, value: ethers.parseEther(CFG.starterMon) });
     await tx.wait();
     return true;
+  }
+
+  // ---------- External wallet (MetaMask) ----------
+  // Switch (or add) Monad Testnet first, then build the provider, then verify the chain,
+  // so a payment can never be prompted on another network.
+  async function connectWallet() {
+    if (!window.ethereum) throw new Error(t("noWallet"));
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    const chainHex = "0x" + CFG.chainId.toString(16);
+    try {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainHex }] });
+    } catch (e) {
+      if (e && e.code === 4902) {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: chainHex,
+            chainName: "Monad Testnet",
+            nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
+            rpcUrls: [CFG.rpcUrl],
+            blockExplorerUrls: [CFG.explorer]
+          }]
+        });
+      }
+    }
+    const bp = new ethers.BrowserProvider(window.ethereum);
+    const net = await bp.getNetwork();
+    if (net.chainId !== BigInt(CFG.chainId)) {
+      const err = new Error(t("wrongNetwork"));
+      err.code = "WRONG_NETWORK";
+      throw err;
+    }
+    return bp.getSigner();
   }
 
   // ---------- Views ----------
@@ -240,6 +283,8 @@
 
   // Customer
   let amount = 10;
+  let lastPayAt = 0;
+  const currentRoute = () => location.hash.replace(/^#\/?/, "");
   async function renderPay() {
     if (!configured) return notConfigured();
     view().innerHTML = `
@@ -274,9 +319,14 @@
     const btn = document.getElementById("payBtn");
     const note = document.getElementById("payNote");
     btn.disabled = true;
+    view().querySelectorAll(".chip").forEach((c) => { c.disabled = true; });
     try {
       const wei = weiFromSoles(amount);
       btn.innerHTML = `<span class="spinner"></span>${t("preparing")}`;
+      // Monad reserve-balance rule: a low-balance account may only spend if it sent no other
+      // transaction in the last 3 blocks (~1.2 s), so space out back-to-back payments.
+      const wait = lastPayAt + 2500 - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       // Monad charges gas on the gas limit, not on gas used, so keep a generous margin.
       const ok = await ensureFunds(wei + ethers.parseEther("0.03"));
       if (!ok) return renderNeedFunds();
@@ -284,6 +334,7 @@
       const t0 = performance.now();
       const tx = await yafi.connect(getCustomer()).processSale(CFG.merchant, { value: wei });
       const rcpt = await tx.wait();
+      lastPayAt = Date.now();
       const secs = ((performance.now() - t0) / 1000).toFixed(1);
       let retained = 0n, net = wei;
       for (const log of rcpt.logs) {
@@ -292,9 +343,11 @@
           if (p && p.name === "SaleProcessed") { retained = p.args.retained; net = p.args.netToMerchant; }
         } catch (e) { /* other event */ }
       }
+      if (currentRoute() !== "pagar") return; // the user navigated away meanwhile
       renderPaid(net, retained, secs, tx.hash);
     } catch (e) {
       btn.disabled = false;
+      view().querySelectorAll(".chip").forEach((c) => { c.disabled = false; });
       btn.textContent = t("payBtn", { x: "S/ " + amount.toFixed(2) });
       note.textContent = friendlyError(e);
     }
@@ -344,13 +397,7 @@
     btn.disabled = true;
     btn.innerHTML = `<span class="spinner"></span>${t("paying")}`;
     try {
-      if (!window.ethereum) throw new Error(t("noWallet"));
-      const bp = new ethers.BrowserProvider(window.ethereum);
-      await bp.send("eth_requestAccounts", []);
-      try {
-        await bp.send("wallet_switchEthereumChain", [{ chainId: "0x" + CFG.chainId.toString(16) }]);
-      } catch (e) { /* user switches network manually */ }
-      const signer = await bp.getSigner();
+      const signer = await connectWallet();
       const wei = weiFromSoles(amount);
       const t0 = performance.now();
       const tx = await yafi.connect(signer).processSale(CFG.merchant, { value: wei });
@@ -427,7 +474,8 @@
   async function pollSales() {
     try {
       const latest = await provider.getBlockNumber();
-      if (fromBlock === null) fromBlock = Math.max(0, latest - 90);
+      // Start near the tip, and jump forward if we fell far behind (tab hidden, view left)
+      if (fromBlock === null || latest - fromBlock > 200) fromBlock = Math.max(0, latest - 90);
       if (latest < fromBlock) return;
       const to = Math.min(latest, fromBlock + 99); // public RPCs cap the block range
       const logs = await yafi.queryFilter(yafi.filters.SaleProcessed(CFG.merchant), fromBlock, to);
@@ -483,18 +531,12 @@
         <button class="btn btn-secondary" id="fundBtn" type="button">${t("fundBtn", { x: CFG.starterMon })}</button>
       </section>`;
     const showTreasury = async () => {
-      try { document.getElementById("treas").textContent = soles(await yafi.treasury()) + "  (" + ethers.formatEther(await yafi.treasury()) + " MON)"; } catch (e) { /* contract not reachable yet */ }
+      try { const tr = await yafi.treasury(); document.getElementById("treas").textContent = soles(tr) + "  (" + ethers.formatEther(tr) + " MON)"; } catch (e) { /* contract not reachable yet */ }
     };
     showTreasury();
     document.getElementById("connectBtn").addEventListener("click", async () => {
       try {
-        if (!window.ethereum) throw new Error(t("noWallet"));
-        const bp = new ethers.BrowserProvider(window.ethereum);
-        await bp.send("eth_requestAccounts", []);
-        try {
-          await bp.send("wallet_switchEthereumChain", [{ chainId: "0x" + CFG.chainId.toString(16) }]);
-        } catch (e) { /* user switches network manually */ }
-        adminSigner = await bp.getSigner();
+        adminSigner = await connectWallet();
         document.getElementById("who").textContent = await adminSigner.getAddress();
       } catch (e) { toast(friendlyError(e)); }
     });

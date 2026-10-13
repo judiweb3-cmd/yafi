@@ -73,7 +73,7 @@ Repayment per sale means many tiny transactions per merchant, cents at a time. I
 
 Two Monad specifics shaped the design ([Monad docs: differences from Ethereum](https://docs.monad.xyz/developer-essentials/differences)):
 - **Gas is charged on the gas limit, not on gas used.** The app lets ethers estimate the exact limit and keeps a margin in the customer's test balance.
-- **Reserve balance (10 MON per account).** A payment whose value would take a normal account below 10 MON reverts, unless the account sent no other transaction in the last 3 blocks. Our customer accounts pay one sale at a time, which fits that exception.
+- **Reserve balance (10 MON per account).** A payment whose value would take a normal account below 10 MON reverts, unless the account sent no other transaction in the last 3 blocks. Our customer accounts pay one sale at a time, and the app waits about 2.5 seconds between payments from the same account to stay within that exception.
 
 ## Architecture
 
@@ -149,7 +149,11 @@ The contract's comments and error messages are in Spanish, for the target market
 - This is a **testnet prototype**: test MON stands in for soles at a demo rate of 1 sol = 0.001 MON.
 - A single admin sets loans and retention; there is no automated scoring yet.
 - The invisible customer account stores its key in the browser's localStorage, which is acceptable for testnet only.
-- The contract has not been audited.
+- The contract has not been audited. An independent code review before submission found these contract-level limits, which would need a new deployment to change:
+  - `processSale` accepts any amount, so dust or self-paid sales could inflate `salesCount`. A production version needs a minimum sale amount and scoring based on repaid value, not sale count.
+  - `totalGranted` and `repaymentProgressBps` add up across loans, so a second loan to the same merchant mixes old and new progress.
+  - A customer can still pay the merchant outside the contract; repayment only happens on sales that go through YAFI.
+- Monad's reserve-balance rule means a low-balance customer account can only pay if it sent no other transaction in the last 3 blocks, so the app spaces back-to-back payments by about 2.5 seconds.
 - YAFI is not a bank and does not take deposits. In Peru, taking deposits from the public requires authorisation from the banking regulator, the SBS (art. 11, Law 26702).
 
 ## Roadmap

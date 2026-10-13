@@ -67,7 +67,7 @@ Pagar el préstamo venta por venta significa muchas transacciones diminutas por 
 
 Dos particularidades de Monad guiaron el diseño ([documentación de Monad: diferencias con Ethereum](https://docs.monad.xyz/developer-essentials/differences)):
 - **El gas se cobra sobre el límite reservado, no sobre el usado.** La app deja que ethers calcule el límite exacto y mantiene un margen en el saldo de prueba del cliente.
-- **Saldo de reserva (10 MON por cuenta).** Un pago que dejaría una cuenta normal por debajo de 10 MON se revierte, salvo que esa cuenta no haya enviado otra transacción en los últimos 3 bloques. Las cuentas de los clientes pagan una venta a la vez, lo que encaja en esa excepción.
+- **Saldo de reserva (10 MON por cuenta).** Un pago que dejaría una cuenta normal por debajo de 10 MON se revierte, salvo que esa cuenta no haya enviado otra transacción en los últimos 3 bloques. Las cuentas de los clientes pagan una venta a la vez, y la app espera unos 2.5 segundos entre pagos de la misma cuenta para cumplir esa excepción.
 
 ## Arquitectura
 
@@ -98,7 +98,11 @@ Para desplegar tu propio contrato, para la app local y para la tabla de mensajes
 - Es un **prototipo en testnet**: el MON de prueba representa soles con una tasa de demo de 1 sol = 0.001 MON.
 - Un solo administrador define préstamos y retención; todavía no hay scoring automático.
 - La cuenta invisible del cliente guarda su clave en el navegador (localStorage), aceptable solo en testnet.
-- El contrato no ha sido auditado.
+- El contrato no ha sido auditado. Una revisión independiente del código antes de la entrega encontró estos límites del contrato, que requerirían un nuevo despliegue:
+  - `processSale` acepta cualquier monto, así que ventas mínimas o pagadas por el propio comerciante podrían inflar `salesCount`. Una versión de producción necesita un monto mínimo por venta y un scoring basado en lo pagado, no en el número de ventas.
+  - `totalGranted` y `repaymentProgressBps` se acumulan entre préstamos, así que un segundo préstamo al mismo comerciante mezcla el avance del anterior.
+  - Un cliente todavía puede pagarle al comerciante por fuera del contrato; la retención solo ocurre en las ventas que pasan por YAFI.
+- Por la regla de saldo de reserva de Monad, una cuenta de cliente con poco saldo solo puede pagar si no envió otra transacción en los últimos 3 bloques, así que la app espacia los pagos seguidos unos 2.5 segundos.
 - YAFI no es un banco y no capta depósitos. En Perú, captar ahorro del público requiere autorización de la SBS (art. 11, Ley 26702).
 
 ## Hoja de ruta

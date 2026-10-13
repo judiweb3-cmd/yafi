@@ -10,9 +10,10 @@ window.YAFI_CONFIG = {
   // Wallet of "Rosa", the demo merchant
   merchant: "0x44e0C28209F3c2735613b13c3813826A9eeC135D",
 
-  // Optional, and NEVER committed: key of a testnet-only "sponsor" wallet that tops up
-  // each visitor automatically. Empty = the visitor shows a code and the admin sends test
-  // funds from #/admin, or the visitor pays with their own MetaMask.
+  // Keep EMPTY in this repo. Anything here is served publicly by GitHub Pages, so a key
+  // pasted here is a published key. It is only for local testing with a throwaway
+  // testnet wallet. Empty = the visitor pays with their own MetaMask, or shows a code
+  // and the admin sends test funds from #/admin.
   sponsorKey: "",
 
   // Demo exchange rate: 1 sol (PEN) = 0.001 testnet MON
