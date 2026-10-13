@@ -119,6 +119,8 @@
       paidTitle: "¡Pago enviado!",
       paidTime: "Confirmado en {s} s",
       payAgain: "Pagar otra vez",
+      share: "Compartir comprobante", shareCopied: "Comprobante copiado ✔",
+      shareText: "✅ Pago enviado con YAFI\n{x} a Desayunos Rosa\nN° de operación: {op}\n{when}\n(Demo con montos de prueba, no es dinero real)",
       seeRosa: "Ver lo que ve Rosa",
       needFunds: "Activa tu saldo de prueba",
       needFundsHelp: "Esta demo usa saldo de prueba, no dinero real. Copia tu código y envíalo al equipo de YAFI (por ejemplo, por WhatsApp) para activarlo.",
@@ -207,6 +209,8 @@
       paidTitle: "Payment sent!",
       paidTime: "Confirmed in {s} s",
       payAgain: "Pay again",
+      share: "Share receipt", shareCopied: "Receipt copied ✔",
+      shareText: "✅ Payment sent with YAFI\n{x} to Desayunos Rosa\nOperation no.: {op}\n{when}\n(Demo with test amounts, not real money)",
       seeRosa: "See what Rosa sees",
       needFunds: "Activate your test balance",
       needFundsHelp: "This demo uses test balance, not real money. Copy your code and send it to the YAFI team (e.g. by WhatsApp) to activate it.",
@@ -593,9 +597,19 @@
         </div>
         <p><span class="badge">⚡ ${t("paidTime", { s: secs })}</span></p>
       </section>
+      <button class="btn btn-secondary" id="shareBtn" type="button">${t("share")}</button>
       <button class="btn btn-primary" id="againBtn" type="button">${t("payAgain")}</button>
       <a class="btn btn-secondary" href="#/rosa">${t("seeRosa")}</a>`;
     document.getElementById("againBtn").addEventListener("click", renderPay);
+    // Share like any payment app: the phone's own menu (WhatsApp, Gmail, Telegram…), or copy as a fallback
+    document.getElementById("shareBtn").addEventListener("click", async () => {
+      const text = t("shareText", { x: fmtSol(sol), op: opNum, when });
+      if (navigator.share) {
+        try { await navigator.share({ title: t("paidTitle"), text }); } catch (e) { /* closed by the user */ }
+        return;
+      }
+      try { await navigator.clipboard.writeText(text); toast(t("shareCopied")); } catch (e) { toast(text); }
+    });
   }
 
   // Shown only when no automatic test balance is available (no sponsor configured).
