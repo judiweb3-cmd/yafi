@@ -27,7 +27,7 @@ window.YAFI_CONFIG = {
 
   // Optional URL of a small sponsor service that sends test balance to new visitors.
   // Its key lives as a secret on that service, never in this repo.
-  sponsorUrl: "",
+  sponsorUrl: "https://yafi-sponsor.judiweb3.workers.dev",
 
   // Test balance sent to each visitor (MON). Monad charges gas on the gas limit,
   // so this leaves room for several payments.
