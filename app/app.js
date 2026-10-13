@@ -105,7 +105,7 @@
       newSale: "¡Nueva venta!",
       soundOn: "🔔 Activar sonido de ventas",
       soundReady: "🔔 Sonido activado",
-      voicePaid: "¡Listo! ¡Pagaste con Yafi!", voiceSale: "¡Yafiii! ¡Recibiste {x}!",
+      voicePaid: "¡Listo! ¡Pagaste {x} con Yafi!", voiceSale: "¡Yafiii! ¡Recibiste {x}!",
       sessionTotal: "Recibiste en esta sesión",
       salesN: "{n} ventas",
       verified: "Comercio verificado",
@@ -196,7 +196,7 @@
       newSale: "New sale!",
       soundOn: "🔔 Turn on sale sounds",
       soundReady: "🔔 Sounds on",
-      voicePaid: "Done! You paid with Yafi!", voiceSale: "Yafiii! You received {x}!",
+      voicePaid: "Done! You paid {x} with Yafi!", voiceSale: "Yafiii! You received {x}!",
       sessionTotal: "Received this session",
       salesN: "{n} sales",
       verified: "Verified merchant",
@@ -621,7 +621,7 @@
       <a class="btn btn-secondary" href="#/rosa">${t("seeRosa")}</a>`;
     document.getElementById("againBtn").addEventListener("click", renderPay);
     playYafiChime();
-    say(t("voicePaid"), 900);
+    say(t("voicePaid", { x: spokenSoles(weiFromSoles(sol)) }), 900);
     // Share like any payment app: the voucher as an image through the phone's own menu
     // (WhatsApp, Gmail, Telegram…). Drawn now, so the tap opens the menu without delay.
     const text = t("shareText", { x: fmtSol(sol), op: opNum, when });
