@@ -164,6 +164,15 @@ The v1 contract's comments and error messages are in Spanish, for the target mar
 | `YAFI: destino invalido` / `retiro fallido` | Invalid withdrawal address / withdrawal failed |
 | `YAFI: nuevo admin invalido` | Invalid new admin address |
 
+## Legal path to launch
+
+Peru has no crypto-specific law, so YAFI is designed to fit rules that already exist:
+
+- **Lending:** YAFI lends its own funds. In Peru, that requires no banking licence, only an anti-money-laundering registration with the SBS, the banking regulator ([Res. SBS 00650-2024](https://busquedas.elperuano.pe/dispositivo/NL/2264383-1)). Rates stay below the legal maximum set by the BCRP, Peru's central bank.
+- **Payments:** customers pay through a licensed payment provider, such as card networks or an authorised e-wallet. YAFI never holds the merchants' money ([BCRP Circular 0026-2026](https://busquedas.elperuano.pe/dispositivo/NL/2561268-1)).
+- **Blockchain:** Monad is the internal ledger. Users only see soles and never buy, hold or exchange crypto.
+- **Pilot:** since 2025, the SBS sandbox also accepts firms the SBS does not supervise ([Res. SBS 04142-2025](https://busquedas.elperuano.pe/dispositivo/NL/2461089-1)). The next step is a supervised pilot there, together with a regulated partner.
+
 ## Limitations (honest status)
 
 - This is a **testnet prototype**: test MON stands in for soles at a demo rate of 1 sol = 0.001 MON.
@@ -174,6 +183,7 @@ The v1 contract's comments and error messages are in Spanish, for the target mar
 - The self-payment block stops a merchant from paying from their own account, not from a second account they control. Scoring in production should weigh repaid value and many distinct payers, not only the sales count.
 - Monad's reserve-balance rule means a low-balance customer account can only pay if it sent no other transaction in the last 3 blocks, so the app spaces back-to-back payments by about 2.5 seconds.
 - YAFI is not a bank and does not take deposits. In Peru, taking deposits from the public requires authorisation from the banking regulator, the SBS (art. 11, Law 26702).
+- Before launch, a Peruvian lawyer must validate this design.
 
 ## Roadmap
 

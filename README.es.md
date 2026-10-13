@@ -111,6 +111,15 @@ npx hardhat test          # 43 pruebas en verde
 
 Para desplegar tu propio contrato, para la app local y para la tabla de mensajes de error, ver las secciones correspondientes del [README en inglés](README.md#run-it-yourself).
 
+## Ruta legal para lanzar
+
+Perú no tiene una ley cripto, así que YAFI se diseñó para encajar en normas que ya existen:
+
+- **Préstamos:** YAFI presta con fondos propios. En Perú eso no requiere licencia de banco, solo inscribirse en la SBS para la supervisión antilavado ([Res. SBS 00650-2024](https://busquedas.elperuano.pe/dispositivo/NL/2264383-1)). Las tasas se mantienen por debajo del máximo legal que fija el BCRP.
+- **Pagos:** los clientes pagan por un proveedor de pagos con licencia, como las redes de tarjetas o una billetera autorizada. YAFI nunca tiene el dinero de los comercios ([Circular BCRP 0026-2026](https://busquedas.elperuano.pe/dispositivo/NL/2561268-1)).
+- **Blockchain:** Monad es el libro contable interno. Los usuarios solo ven soles y nunca compran, guardan ni cambian cripto.
+- **Piloto:** desde 2025, el sandbox de la SBS también acepta empresas que la SBS no supervisa ([Res. SBS 04142-2025](https://busquedas.elperuano.pe/dispositivo/NL/2461089-1)). El siguiente paso es un piloto supervisado ahí, junto con un aliado regulado.
+
 ## Limitaciones (estado honesto)
 
 - Es un **prototipo en testnet**: el MON de prueba representa soles con una tasa de demo de 1 sol = 0.001 MON.
@@ -121,6 +130,7 @@ Para desplegar tu propio contrato, para la app local y para la tabla de mensajes
 - El bloqueo de autopago impide que el comerciante pague desde su propia cuenta, no desde una segunda cuenta que controle. En producción, el scoring debería pesar el monto pagado y muchos pagadores distintos, no solo el número de ventas.
 - Por la regla de saldo de reserva de Monad, una cuenta de cliente con poco saldo solo puede pagar si no envió otra transacción en los últimos 3 bloques, así que la app espacia los pagos seguidos unos 2.5 segundos.
 - YAFI no es un banco y no capta depósitos. En Perú, captar ahorro del público requiere autorización de la SBS (art. 11, Ley 26702).
+- Antes de lanzar, un abogado peruano debe validar este diseño.
 
 ## Hoja de ruta
 
