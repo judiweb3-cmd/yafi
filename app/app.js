@@ -748,7 +748,7 @@
       try {
         speechSynthesis.cancel();
         const v = pickVoice();
-        const parts = text.match(/[^!.]+[!.]?/g) || [text];
+        const parts = text.match(/[^!]+!?/g) || [text]; // split on "!" only: "4.50" has a dot
         parts.map((p) => p.trim()).filter(Boolean).forEach((part, i) => {
           const u = new SpeechSynthesisUtterance(part);
           u.lang = v ? v.lang : (lang === "es" ? "es-PE" : "en-US");
