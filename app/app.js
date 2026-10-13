@@ -53,6 +53,18 @@
     "function grantCredit(address merchant, uint256 amount, uint16 retentionBps)"
   ];
 
+  // Live exchange rate for the dollar reference shown (and spoken) in English. If the free
+  // rate service does not answer, the fixed rate in config.js stays in use.
+  (async () => {
+    try {
+      const ctl = new AbortController();
+      setTimeout(() => ctl.abort(), 4000);
+      const r = await (await fetch("https://open.er-api.com/v6/latest/USD", { signal: ctl.signal })).json();
+      const pen = r && r.rates && Number(r.rates.PEN);
+      if (pen > 2.5 && pen < 5) CFG.solesPerUsd = pen;
+    } catch (e) { /* keep the configured rate */ }
+  })();
+
   // No cache (balances change every block) and fast polling: Monad confirms in under a second
   const provider = new ethers.JsonRpcProvider(CFG.rpcUrl, CFG.chainId, { staticNetwork: true, cacheTimeout: -1, pollingInterval: 500 });
   const yafi = new ethers.Contract(CFG.contract, ABI, provider);
