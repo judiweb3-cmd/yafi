@@ -1,0 +1,175 @@
+# YAFI · Your sales are your credit
+
+> A payments app that never mentions blockchain. Every QR sale an informal merchant receives automatically repays a small microloan on **Monad**, and builds the credit history they never had.
+
+**Track:** Consumer Products & Payments · Monad Metropolis Hackathon 2026
+**Live demo:** https://judiweb3-cmd.github.io/yafi/ (Monad Testnet)
+**Contract:** [`0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831`](https://testnet.monadexplorer.com/address/0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831) on Monad Testnet (chain ID 10143)
+
+🇪🇸 [Leer en español](README.es.md)
+
+---
+
+## The problem
+
+About **70% of workers in Peru are informal** ([INEI, 2025](https://www.expreso.com.pe/economia/formalizacion-laboral-impulsaria-crecimiento-en-peru-mas-del-70-de-trabajadores-sigue-en-informalidad-epen-inei-noticia/1283864/)). A street vendor like Rosa (an illustrative example, not a real user) sells breakfast from a cart every day, and many customers already pay her by scanning a QR code with a mobile wallet. But she has no payslips and no formal credit history, so banks say no.
+
+When she needs working capital, the option left is often *gota a gota* ("drop by drop"), an informal daily-repayment loan. An IPE study found that about **211,000 Peruvian families** used it in one year, and that **half of informal borrowers pay more than 500% a year** ([IPE via Gestión, 2024](https://gestion.pe/tu-dinero/finanzas-personales/prestamos-gota-a-gota-acechan-a-211000-familias-cuanto-cobran-informalidad-noticia/)).
+
+Rosa does have something lenders want: a steady flow of daily sales. YAFI turns that flow into credit.
+
+## How it works
+
+1. **The lender grants a microloan** (in the demo: S/ 500 at 10% retention per sale, capped at 30%). The money lands in Rosa's wallet immediately.
+2. **A customer pays Rosa by QR**, as they already do with mobile wallets.
+3. **The smart contract splits each sale in the same transaction:** 90% goes to Rosa instantly and 10% repays her loan. No fixed instalments, no trips to a branch, no cash collection.
+4. **Every sale and repayment is recorded on chain.** That behavioural history (sales count, amount repaid) is the base for bigger loans later, and for a credit record of the informal economy.
+
+The customer never sees a wallet, a seed phrase or the word "blockchain": the app creates an invisible account in the browser and shows prices in soles.
+
+## What we built during the hackathon
+
+Everything in this repository was written during the hackathon window (October 2026). There is no pre-existing code.
+
+| Piece | What it does |
+|---|---|
+| `contracts/YafiCreditEscrow.sol` | Escrow that holds the lending treasury, grants loans, and splits every sale between the merchant and the loan repayment. Retention is set in basis points with a hard 30% cap, has a reentrancy guard and owner-only lending. |
+| `test/YafiCreditEscrow.test.js` | 13 Hardhat tests: funding, lending rules, the sale split, never over-collecting, closing the line at 100%, frozen lines, treasury withdrawals and access control. |
+| `app/` | Mobile web app (ES/EN). **Pay Rosa** (customer), **Rosa's view** (live loan balance and sales feed read from contract events) and an **admin panel** (lender, via MetaMask). |
+
+### Live on Monad Testnet
+
+- Contract: [`0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831`](https://testnet.monadexplorer.com/address/0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831), deployed with Remix (Solidity 0.8.34) and a 5 MON treasury.
+- Demo merchant "Rosa": [`0x44e0C28209F3c2735613b13c3813826A9eeC135D`](https://testnet.monadexplorer.com/address/0x44e0C28209F3c2735613b13c3813826A9eeC135D).
+- On-chain proof: a 0.5 MON loan (S/ 500 at the demo rate) was granted to Rosa, then a S/ 10 sale left her debt at S/ 499, with 1 sale recorded. All transactions are listed on the contract's explorer page.
+
+## Try it (judges)
+
+1. Open the **live demo** on your phone or computer. The app follows your browser language, and the ES/EN button switches it.
+2. Tap **Pay Rosa**, choose an amount and pay. You will see how much goes to Rosa and how much repays her loan, then the confirmation time and a receipt link to the explorer.
+3. Open **See it as Rosa** in another tab or phone to watch her balance go down live as sales arrive.
+
+**Test funds.** The invisible account starts empty, and no private key is published in this repo (hackathon rule 5.3). If it has no balance, the app offers two options:
+- **Pay with my wallet:** pay directly from MetaMask on Monad Testnet (chain ID 10143, RPC `https://testnet-rpc.monad.xyz`).
+- **Send the code:** copy the account code and open an issue in this repository. The admin sends test MON from the admin panel.
+
+## Screenshots
+
+| Home | Pay Rosa | Payment confirmed | Rosa's live view |
+|---|---|---|---|
+| ![Home](docs/screenshots/1-home.png) | ![Pay](docs/screenshots/2-pay.png) | ![Paid](docs/screenshots/3-paid.png) | ![Rosa](docs/screenshots/4-rosa.png) |
+
+App screenshots were taken on a local test chain during development. On-chain proof from Monad Testnet (Remix reading the contract after the first sale: debt 0.499 MON, repaid 0.001 MON, 1 sale):
+
+![First sale on Monad Testnet](docs/screenshots/5-first-sale-monad-testnet.png)
+
+## Why Monad
+
+Repayment per sale means many tiny transactions per merchant, cents at a time. It only works if each payment confirms as fast as the QR payment it replaces and costs almost nothing.
+
+- **Speed:** 300 ms blocks and 600 ms finality ([Monad docs](https://docs.monad.xyz/)). The app shows the real confirmation time after every payment.
+- **Full EVM compatibility:** a standard Solidity contract, Hardhat tests, Remix deployment and ethers.js, with no changes.
+- **Live UX from events:** Rosa's screen polls `SaleProcessed` logs every few seconds, so a sale appears on her phone almost as soon as the customer pays.
+
+Two Monad specifics shaped the design ([Monad docs: differences from Ethereum](https://docs.monad.xyz/developer-essentials/differences)):
+- **Gas is charged on the gas limit, not on gas used.** The app lets ethers estimate the exact limit and keeps a margin in the customer's test balance.
+- **Reserve balance (10 MON per account).** A payment whose value would take a normal account below 10 MON reverts, unless the account sent no other transaction in the last 3 blocks. Our customer accounts pay one sale at a time, which fits that exception.
+
+## Architecture
+
+```
+ Customer's phone (browser)                    Monad Testnet
+ ┌──────────────────────────┐   processSale()  ┌─────────────────────────────┐
+ │ app/  · Pay Rosa          │ ───────────────► │ YafiCreditEscrow            │
+ │ invisible wallet (local)  │                  │  • retains X% → treasury    │
+ └──────────────────────────┘                  │  • pays net → Rosa (same tx)│
+ ┌──────────────────────────┐  SaleProcessed   │  • updates debt, history    │
+ │ app/  · Rosa's view       │ ◄─────────────── │                             │
+ │ reads balance + events    │   events / view  │ grantCredit() ◄── lender    │
+ └──────────────────────────┘                  └─────────────────────────────┘
+ ┌──────────────────────────┐  grantCredit() / test funds
+ │ app/  · Admin (MetaMask)  │ ─────────────────────────►
+ └──────────────────────────┘
+```
+
+- **Contract:** holds the treasury, the per-merchant record (`creditBalance`, `totalGranted`, `totalRepaid`, `salesCount`, `retentionBps`, `isActive`) and the split logic. `previewSale` shows the split before paying.
+- **Frontend:** static HTML, CSS and JavaScript with no build step and no backend. It talks to the public Monad RPC through ethers.js.
+
+## Tech stack
+
+Solidity 0.8.34 · Hardhat 2 (with hardhat-toolbox, Chai and Mocha) · ethers.js 6.17 · vanilla HTML/CSS/JS · Remix IDE + MetaMask (deployment) · GitHub Pages (hosting) · Monad Testnet.
+
+## Run it yourself
+
+Requirements: Node.js 18+ and npm.
+
+```bash
+git clone https://github.com/judiweb3-cmd/yafi
+cd yafi
+npm install
+npx hardhat test          # 13 passing
+```
+
+**Deploy your own contract (optional).** Either paste `contracts/YafiCreditEscrow.sol` into [Remix](https://remix.ethereum.org), compile with 0.8.34 and deploy with MetaMask on Monad Testnet, or use Hardhat:
+
+```bash
+cp .env.example .env      # add the PRIVATE_KEY of a testnet-only wallet
+INITIAL_TREASURY=1 npm run deploy:testnet
+```
+
+Then call `grantCredit(merchant, amountInWei, retentionBps)` from the owner account, for example `grantCredit(<merchant>, 500000000000000000, 1000)` for 0.5 MON at 10%.
+
+**Run the app locally.** Set `contract` and `merchant` in `app/config.js`, then serve the folder:
+
+```bash
+npx serve app             # or: python3 -m http.server -d app 8080
+```
+
+Routes: `#/` home, `#/pagar` pay Rosa, `#/rosa` merchant view, `#/admin` lender panel.
+
+## Contract error messages
+
+The contract's comments and error messages are in Spanish, for the target market. The deployed source must match this file exactly for explorer verification, so it is published unchanged. Translations:
+
+| Message | Meaning |
+|---|---|
+| `YAFI: solo administrador` | Only the admin (lender) |
+| `YAFI: operacion en curso` | Operation already in progress (reentrancy guard) |
+| `YAFI: monto cero` | Amount is zero |
+| `YAFI: comerciante invalido` | Invalid merchant address |
+| `YAFI: retencion fuera de rango` | Retention outside 0.01%–30% |
+| `YAFI: caja insuficiente` | Treasury has insufficient funds |
+| `YAFI: desembolso fallido` | Loan disbursement failed |
+| `YAFI: abono al comerciante fallido` | Payment to the merchant failed |
+| `YAFI: destino invalido` / `retiro fallido` | Invalid withdrawal address / withdrawal failed |
+| `YAFI: nuevo admin invalido` | Invalid new admin address |
+
+## Limitations (honest status)
+
+- This is a **testnet prototype**: test MON stands in for soles at a demo rate of 1 sol = 0.001 MON.
+- A single admin sets loans and retention; there is no automated scoring yet.
+- The invisible customer account stores its key in the browser's localStorage, which is acceptable for testnet only.
+- The contract has not been audited.
+- YAFI is not a bank and does not take deposits. In Peru, taking deposits from the public requires authorisation from the banking regulator, the SBS (art. 11, Law 26702).
+
+## Roadmap
+
+- Credit tiers that reward on-time behaviour with better rates or bigger lines.
+- Independent informal workers paid daily or weekly (not only merchants).
+- Partnerships with regulated lenders and municipal savings banks that would use the behavioural history.
+- Savings with yield only through a licensed partner.
+
+## Attribution
+
+- [ethers.js](https://github.com/ethers-io/ethers.js) v6.17 (MIT), vendored in `app/vendor/ethers.umd.min.js`.
+- [Hardhat](https://hardhat.org) and `@nomicfoundation/hardhat-toolbox` (MIT), for compiling and testing.
+- [Remix IDE](https://remix.ethereum.org) and MetaMask, for deployment.
+- Market figures come from public sources, linked inline.
+
+## Use of AI tools
+
+As the hackathon rules require, we disclose that this project was built with the help of an AI coding assistant, **Claude (Anthropic)**. It drafted the smart contract, tests, frontend and documentation. The founder defined the product and the credit logic, drawing on 8 years as a microcredit officer for small businesses, reviewed every step, deployed the contract and ran the on-chain tests.
+
+## License
+
+[MIT](LICENSE). The YAFI name and brand are reserved and are not covered by the license.
