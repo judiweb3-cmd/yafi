@@ -122,7 +122,6 @@
       paidDetail: "Rosa recibió {net} y {ret} fueron a su préstamo.",
       paidAll: "Rosa recibió {net} completos.",
       paidTime: "Confirmado en {s} s",
-      receipt: "Ver comprobante",
       payAgain: "Pagar otra vez",
       seeRosa: "Ver lo que ve Rosa",
       needFunds: "Activa tu saldo de prueba",
@@ -215,7 +214,6 @@
       paidDetail: "Rosa received {net} and {ret} went to her loan.",
       paidAll: "Rosa received the full {net}.",
       paidTime: "Confirmed in {s} s",
-      receipt: "View receipt",
       payAgain: "Pay again",
       seeRosa: "See what Rosa sees",
       needFunds: "Activate your test balance",
@@ -364,7 +362,11 @@
       // Wait until the balance arrives (Monad confirms in under a second; allow for slow RPCs)
       for (let i = 0; i < 30; i++) {
         bal = await provider.getBalance(c.address);
-        if (bal >= minWei) return true;
+        if (bal >= minWei) {
+          // Monad executes a few blocks behind consensus: give fresh funds ~3 blocks to settle
+          await new Promise((r) => setTimeout(r, 2500));
+          return true;
+        }
         await new Promise((r) => setTimeout(r, 500));
       }
       return false;
@@ -632,7 +634,6 @@
           <div class="row"><span>${t("date")}</span><b>${esc(when)}</b></div>
         </div>
         <p><span class="badge">⚡ ${t("paidTime", { s: secs })}</span></p>
-        <p class="small"><a href="${CFG.explorer}/tx/${hash}" target="_blank" rel="noopener">${t("receipt")}</a></p>
       </section>
       <button class="btn btn-primary" id="againBtn" type="button">${t("payAgain")}</button>
       <a class="btn btn-secondary" href="#/rosa">${t("seeRosa")}</a>`;
