@@ -50,8 +50,10 @@ Everything in this repository was written during the hackathon window (October 2
 3. Open **See it as Rosa** in another tab or phone to watch her balance go down live as sales arrive.
 
 **Test funds.** The invisible account starts empty, and no private key is published in this repo (hackathon rule 5.3). If it has no balance, the app offers two options:
-- **Pay with my wallet:** pay directly from MetaMask on Monad Testnet (chain ID 10143, RPC `https://testnet-rpc.monad.xyz`).
-- **Send the code:** copy the account code and open an issue in this repository. The admin sends test MON from the admin panel.
+- **For judges and developers → Pay with MetaMask:** pay directly from MetaMask. The app switches to (or adds) Monad Testnet for you (chain ID 10143).
+- **Send the activation code:** copy it and open an issue in this repository. The admin sends test funds from the admin panel.
+
+By design, customers and merchants only ever see soles: no wallet, token or network names. The only crypto wording in the app is inside that collapsed judges/developers option and in the lender's admin panel.
 
 ## Screenshots
 

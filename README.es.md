@@ -50,8 +50,10 @@ Todo el código de este repositorio se escribió durante el hackathon (octubre d
 3. Abre **Ver como Rosa** en otra pestaña o celular para ver bajar su deuda en vivo con cada venta.
 
 **Saldo de prueba.** La cuenta invisible empieza vacía, y en este repositorio no se publica ninguna clave privada (regla 5.3 del hackathon). Si no tiene saldo, la app ofrece dos opciones:
-- **Pagar con mi billetera:** pagar directo desde MetaMask en Monad Testnet (chain ID 10143, RPC `https://testnet-rpc.monad.xyz`).
-- **Enviar el código:** copiar el código de la cuenta y abrir un issue en este repositorio. El equipo de YAFI envía MON de prueba desde el panel de administración.
+- **Para jueces y desarrolladores → Pagar con MetaMask:** pagar directo desde MetaMask. La app cambia (o agrega) la red Monad Testnet por ti (chain ID 10143).
+- **Enviar el código de activación:** copiarlo y abrir un issue en este repositorio. El equipo de YAFI envía saldo de prueba desde el panel de administración.
+
+Por diseño, clientes y comerciantes solo ven soles: ni billeteras, ni tokens, ni nombres de redes. El único lenguaje cripto de la app está en esa opción plegada para jueces y desarrolladores, y en el panel de administración del prestamista.
 
 ## Capturas
 

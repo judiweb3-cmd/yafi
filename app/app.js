@@ -35,7 +35,7 @@
   // ---------- Language ----------
   const T = {
     es: {
-      footer: "Demo en Monad Testnet · montos de prueba, no es dinero real",
+      footer: "Demo · montos de prueba, no es dinero real",
       heroTitle: "Tus ventas son tu crédito",
       heroLead: "Microcrédito para comerciantes que se paga solo: una pequeña parte de cada venta abona al préstamo.",
       howTitle: "Cómo funciona",
@@ -58,14 +58,14 @@
       payAgain: "Pagar otra vez",
       seeRosa: "Ver lo que ve Rosa",
       needFunds: "Tu cuenta de prueba aún no tiene saldo.",
-      needFundsHelp: "Pásale este código al equipo de YAFI para que te envíe saldo de prueba:",
+      needFundsHelp: "Envíale este código de activación al equipo de YAFI (por ejemplo, por WhatsApp) para activar tu saldo de prueba:",
       copy: "Copiar código", copied: "Copiado",
       noWallet: "No encontramos MetaMask en este navegador.",
       wrongNetwork: "Cambia MetaMask a la red Monad Testnet e inténtalo de nuevo.",
       waitMoment: "Espera un segundo y vuelve a intentarlo.",
       lowFunds: "Saldo de prueba insuficiente para este pago.",
-      orWallet: "¿Tienes MetaMask con MON de prueba? Paga directo desde tu billetera:",
-      payWallet: "Pagar {x} con mi billetera",
+      orWallet: "Para jueces y desarrolladores: pagar con MetaMask (Monad Testnet)",
+      payWallet: "Pagar {x} con MetaMask",
       hello: "Hola, Rosa",
       owe: "Te falta pagar",
       paidPct: "{p}% pagado",
@@ -95,7 +95,7 @@
       done: "Listo ✔"
     },
     en: {
-      footer: "Demo on Monad Testnet · test amounts, not real money",
+      footer: "Demo · test amounts, not real money",
       heroTitle: "Your sales are your credit",
       heroLead: "Microcredit for merchants that repays itself: a small part of every sale goes to the loan.",
       howTitle: "How it works",
@@ -118,14 +118,14 @@
       payAgain: "Pay again",
       seeRosa: "See what Rosa sees",
       needFunds: "Your test account has no balance yet.",
-      needFundsHelp: "Send this code to the YAFI team so they can send you test funds:",
+      needFundsHelp: "Send this activation code to the YAFI team (e.g. by WhatsApp) to activate your test balance:",
       copy: "Copy code", copied: "Copied",
       noWallet: "MetaMask was not found in this browser.",
       wrongNetwork: "Switch MetaMask to the Monad Testnet network and try again.",
       waitMoment: "Wait a second and try again.",
       lowFunds: "Not enough test balance for this payment.",
-      orWallet: "Have MetaMask with testnet MON? Pay straight from your wallet:",
-      payWallet: "Pay {x} with my wallet",
+      orWallet: "For judges and developers: pay with MetaMask (Monad Testnet)",
+      payWallet: "Pay {x} with MetaMask",
       hello: "Hi, Rosa",
       owe: "Left to repay",
       paidPct: "{p}% repaid",
@@ -378,11 +378,11 @@
         <button class="btn btn-secondary" id="copyBtn" type="button">${t("copy")}</button>
       </section>
       <button class="btn btn-primary" id="againBtn" type="button">${t("payAgain")}</button>
-      <section class="card" style="margin-top:14px">
-        <p class="muted small">${t("orWallet")}</p>
-        <button class="btn btn-secondary" id="walletBtn" type="button">${t("payWallet", { x: "S/ " + amount.toFixed(2) })}</button>
+      <details class="card" style="margin-top:14px">
+        <summary class="muted small">${t("orWallet")}</summary>
+        <button class="btn btn-secondary" id="walletBtn" type="button" style="margin-top:12px">${t("payWallet", { x: "S/ " + amount.toFixed(2) })}</button>
         <p class="muted small" id="walletNote"></p>
-      </section>`;
+      </details>`;
     document.getElementById("againBtn").addEventListener("click", renderPay);
     document.getElementById("walletBtn").addEventListener("click", payWithWallet);
     document.getElementById("copyBtn").addEventListener("click", async (ev) => {
