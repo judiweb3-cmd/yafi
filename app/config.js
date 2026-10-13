@@ -19,6 +19,13 @@ window.YAFI_CONFIG = {
   // Demo exchange rate: 1 sol (PEN) = 0.001 testnet MON
   monPerSol: 0.001,
 
+  // Reference exchange rate shown to English-speaking visitors (S/ per US$, verified 12 Oct 2026)
+  solesPerUsd: 3.436,
+
+  // Optional URL of a small sponsor service that sends test balance to new visitors.
+  // Its key lives as a secret on that service, never in this repo.
+  sponsorUrl: "",
+
   // Test balance sent to each visitor (MON). Monad charges gas on the gas limit,
   // so this leaves room for several payments.
   starterMon: "0.1"

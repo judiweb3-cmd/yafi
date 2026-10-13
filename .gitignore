@@ -4,3 +4,7 @@ cache
 artifacts
 coverage
 typechain-types
+
+# Local Cloudflare secrets
+.dev.vars
+.wrangler/

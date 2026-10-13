@@ -1,0 +1,10 @@
+name = "yafi-sponsor"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+[vars]
+RPC_URL = "https://testnet-rpc.monad.xyz"
+CHAIN_ID = "10143"
+STARTER_MON = "0.1"
+ALLOWED_ORIGINS = "https://judiweb3-cmd.github.io"
+# SPONSOR_KEY is set with `npx wrangler secret put SPONSOR_KEY` and never written to a file.

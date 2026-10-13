@@ -91,7 +91,14 @@
       rosaGets: "Rosa recibe", loanGets: "Paga su préstamo",
       noLoan: "Rosa no tiene préstamo activo: recibe el 100%.",
       payBtn: "Pagar {x}",
-      preparing: "Preparando tu cuenta…",
+      payTo: "Pagar a",
+      verified: "Comercio verificado",
+      erase: "Borrar",
+      range: "Monto entre {min} y {max}.",
+      paidTo: "Pagaste a",
+      opNumber: "N° de operación",
+      date: "Fecha",
+      preparing: "Conectando de forma segura…",
       paying: "Procesando pago…",
       paidTitle: "¡Pago enviado!",
       paidDetail: "Rosa recibió {net} y {ret} fueron a su préstamo.",
@@ -100,9 +107,9 @@
       receipt: "Ver comprobante",
       payAgain: "Pagar otra vez",
       seeRosa: "Ver lo que ve Rosa",
-      needFunds: "Tu cuenta de prueba aún no tiene saldo.",
-      needFundsHelp: "Envíale este código de activación al equipo de YAFI (por ejemplo, por WhatsApp) para activar tu saldo de prueba:",
-      copy: "Copiar código", copied: "Copiado",
+      needFunds: "Activa tu saldo de prueba",
+      needFundsHelp: "Esta demo usa saldo de prueba, no dinero real. Copia tu código y envíalo al equipo de YAFI (por ejemplo, por WhatsApp) para activarlo.",
+      copy: "Copiar código de activación", copied: "Código copiado ✔",
       noWallet: "No encontramos MetaMask en este navegador.",
       wrongNetwork: "Cambia MetaMask a la red Monad Testnet e inténtalo de nuevo.",
       waitMoment: "Espera un segundo y vuelve a intentarlo.",
@@ -163,7 +170,14 @@
       rosaGets: "Rosa receives", loanGets: "Repays her loan",
       noLoan: "Rosa has no active loan: she receives 100%.",
       payBtn: "Pay {x}",
-      preparing: "Setting up your account…",
+      payTo: "Pay to",
+      verified: "Verified merchant",
+      erase: "Delete",
+      range: "Amount between {min} and {max}.",
+      paidTo: "You paid",
+      opNumber: "Operation no.",
+      date: "Date",
+      preparing: "Connecting securely…",
       paying: "Processing payment…",
       paidTitle: "Payment sent!",
       paidDetail: "Rosa received {net} and {ret} went to her loan.",
@@ -172,9 +186,9 @@
       receipt: "View receipt",
       payAgain: "Pay again",
       seeRosa: "See what Rosa sees",
-      needFunds: "Your test account has no balance yet.",
-      needFundsHelp: "Send this activation code to the YAFI team (e.g. by WhatsApp) to activate your test balance:",
-      copy: "Copy code", copied: "Copied",
+      needFunds: "Activate your test balance",
+      needFundsHelp: "This demo uses test balance, not real money. Copy your code and send it to the YAFI team (e.g. by WhatsApp) to activate it.",
+      copy: "Copy activation code", copied: "Code copied ✔",
       noWallet: "MetaMask was not found in this browser.",
       wrongNetwork: "Switch MetaMask to the Monad Testnet network and try again.",
       waitMoment: "Wait a second and try again.",
@@ -300,7 +314,24 @@
     const c = getCustomer();
     let bal = await provider.getBalance(c.address);
     if (bal >= minWei) return true;
+    if (CFG.sponsorUrl) {
+      // The sponsor service holds its key as a server-side secret and sends test balance.
+      const res = await fetch(CFG.sponsorUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: c.address })
+      }).catch(() => null);
+      if (!res || !res.ok) return false;
+      // Wait until the balance arrives (Monad confirms in under a second; allow for slow RPCs)
+      for (let i = 0; i < 30; i++) {
+        bal = await provider.getBalance(c.address);
+        if (bal >= minWei) return true;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      return false;
+    }
     if (!CFG.sponsorKey) return false;
+    // Local testing only: a throwaway key in a config that is never published
     const sponsor = new ethers.Wallet(CFG.sponsorKey, provider);
     const tx = await sponsor.sendTransaction({ to: c.address, value: ethers.parseEther(CFG.starterMon) });
     await tx.wait();
@@ -371,48 +402,115 @@
     view().innerHTML = `<p><a href="#/">${t("back")}</a></p><div class="card">${t("notConfigured")}</div>`;
   }
 
-  // Customer
-  let amount = 10;
+  // Customer: a payment screen modelled on the mobile wallets people already use
+  // (merchant card, big amount, keypad, one button). No addresses, tokens or networks.
+  const MIN_SOL = 1;   // v2 minimum sale (S/ 1)
+  const MAX_SOL = 50;  // keeps the test balance enough for several payments
+  let amountStr = "10";
   let lastPayAt = 0;
+  let previewTimer = null;
+  const amountNum = () => Number(amountStr) || 0;
+  const fmtSol = (n) => "S/ " + n.toFixed(2);
+  // English viewers (e.g. global judges) also see an approximate US dollar reference.
+  // Prices stay in soles: Rosa sells in Peru.
+  const usdRef = (n) => (lang === "en" && CFG.solesPerUsd) ? `≈ US$ ${(n / CFG.solesPerUsd).toFixed(2)}` : "";
   const currentRoute = () => location.hash.replace(/^#\/?/, "");
+
+  function shopCard() {
+    return `
+      <div class="shop">
+        <div class="avatar">🥪</div>
+        <div class="shop-info">
+          <div class="name">${t("shopName")}</div>
+          <div class="sub">${t("shopSub")}</div>
+        </div>
+        <span class="verified" title="${t("verified")}">✓</span>
+      </div>`;
+  }
+
   async function renderPay() {
     if (!configured) return notConfigured();
+    const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫"];
     view().innerHTML = `
-      <p><a href="#/">${t("back")}</a></p>
-      <section class="card">
-        ${merchantHeader()}
-        <h2 style="margin-top:18px">${t("payTitle")}</h2>
-        <div class="chips">
-          ${[5, 10, 20].map((v) => `<button class="chip ${v === amount ? "on" : ""}" data-v="${v}" type="button">S/ ${v}</button>`).join("")}
-        </div>
-        <div class="split" id="split"><div class="muted small"><span class="spinner"></span></div></div>
-        <button class="btn btn-primary" id="payBtn" type="button">${t("payBtn", { x: "S/ " + amount.toFixed(2) })}</button>
-        <p class="muted small" id="payNote"></p>
-      </section>`;
-    view().querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => { amount = Number(b.dataset.v); renderPay(); }));
+      <div class="pay-top"><a href="#/" class="back">${t("back")}</a><span class="muted small">${t("payTo")}</span></div>
+      ${shopCard()}
+      <section class="amount-box">
+        <div class="amount" id="amount"></div>
+        <div class="usd muted small" id="usd"></div>
+        <div class="split-pill" id="split"><span class="spinner"></span></div>
+      </section>
+      <div class="chips">
+        ${[5, 10, 20].map((v) => `<button class="chip" data-v="${v}" type="button">S/ ${v}</button>`).join("")}
+      </div>
+      <div class="keypad">
+        ${keys.map((k) => `<button class="key" data-k="${k}" type="button" aria-label="${k === "⌫" ? t("erase") : k}">${k}</button>`).join("")}
+      </div>
+      <button class="btn btn-primary pay-btn" id="payBtn" type="button"></button>
+      <p class="muted small center" id="payNote"></p>
+      <div class="overlay" id="overlay" hidden><div class="ring"></div><p id="overlayText"></p></div>`;
+    view().querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => { amountStr = b.dataset.v; onAmount(); }));
+    view().querySelectorAll(".key").forEach((b) => b.addEventListener("click", () => pressKey(b.dataset.k)));
     document.getElementById("payBtn").addEventListener("click", pay);
+    onAmount();
+  }
+
+  function pressKey(k) {
+    if (k === "⌫") amountStr = amountStr.slice(0, -1) || "0";
+    else if (k === ".") { if (!amountStr.includes(".")) amountStr += "."; }
+    else {
+      if (/\.\d{2}$/.test(amountStr)) return; // two decimals max
+      const next = amountStr === "0" ? k : amountStr + k;
+      if (Number(next) > MAX_SOL) return;
+      amountStr = next;
+    }
+    onAmount();
+  }
+
+  function onAmount() {
+    const n = amountNum();
+    const el = document.getElementById("amount");
+    if (!el) return;
+    el.innerHTML = `<span class="cur">S/</span>${esc(amountStr)}`;
+    document.getElementById("usd").textContent = usdRef(n);
+    view().querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c.dataset.v === amountStr));
+    const ok = n >= MIN_SOL && n <= MAX_SOL;
+    const btn = document.getElementById("payBtn");
+    btn.disabled = !ok;
+    btn.textContent = t("payBtn", { x: fmtSol(n) });
+    document.getElementById("payNote").textContent = ok ? "" : t("range", { min: fmtSol(MIN_SOL), max: fmtSol(MAX_SOL) });
+    clearTimeout(previewTimer);
+    if (ok) previewTimer = setTimeout(refreshSplit, 250);
+    else document.getElementById("split").textContent = "";
+  }
+
+  async function refreshSplit() {
+    const split = document.getElementById("split");
+    if (!split) return;
+    const asked = amountStr;
     try {
-      const wei = weiFromSoles(amount);
-      const [retained, net] = await yafi.previewSale(CFG.merchant, wei);
-      const split = document.getElementById("split");
-      if (!split) return;
+      const [retained, net] = await yafi.previewSale(CFG.merchant, weiFromSoles(amountNum()));
+      if (asked !== amountStr || !document.getElementById("split")) return; // amount changed meanwhile
       split.innerHTML = retained > 0n
-        ? `<div class="row"><span>${t("rosaGets")}</span><b>${soles(net)}</b></div>
-           <div class="row loan"><span>${t("loanGets")}</span><b>${soles(retained)}</b></div>`
-        : `<div class="muted small">${t("noLoan")}</div>`;
+        ? `<span>${t("rosaGets")} <b>${soles(net)}</b></span><span class="dot">·</span><span class="loan">${t("loanGets")} <b>${soles(retained)}</b></span>`
+        : `<span>${t("noLoan")}</span>`;
     } catch (e) {
-      document.getElementById("split").innerHTML = `<div class="muted small">${esc(friendlyError(e))}</div>`;
+      split.textContent = friendlyError(e);
     }
   }
 
+  function overlay(text) {
+    const o = document.getElementById("overlay");
+    if (!o) return;
+    o.hidden = !text;
+    if (text) document.getElementById("overlayText").textContent = text;
+  }
+
   async function pay() {
-    const btn = document.getElementById("payBtn");
     const note = document.getElementById("payNote");
-    btn.disabled = true;
-    view().querySelectorAll(".chip").forEach((c) => { c.disabled = true; });
+    const sol = amountNum();
     try {
-      const wei = weiFromSoles(amount);
-      btn.innerHTML = `<span class="spinner"></span>${t("preparing")}`;
+      const wei = weiFromSoles(sol);
+      overlay(t("preparing"));
       // Monad reserve-balance rule: a low-balance account may only spend if it sent no other
       // transaction in the last 3 blocks (~1.2 s), so space out back-to-back payments.
       const wait = lastPayAt + 2500 - Date.now();
@@ -420,37 +518,47 @@
       // Monad charges gas on the gas limit, not on gas used, so keep a generous margin.
       const ok = await ensureFunds(wei + ethers.parseEther("0.03"));
       if (!ok) return renderNeedFunds();
-      btn.innerHTML = `<span class="spinner"></span>${t("paying")}`;
+      overlay(t("paying"));
       const t0 = performance.now();
       const tx = await yafi.connect(getCustomer()).processSale(CFG.merchant, { value: wei });
       const rcpt = await tx.wait();
       lastPayAt = Date.now();
-      const secs = ((performance.now() - t0) / 1000).toFixed(1);
-      let retained = 0n, net = wei;
-      for (const log of rcpt.logs) {
-        try {
-          const p = yafi.interface.parseLog(log);
-          if (p && p.name === "SaleProcessed") { retained = p.args.retained; net = p.args.netToMerchant; }
-        } catch (e) { /* other event */ }
-      }
       if (currentRoute() !== "pagar") return; // the user navigated away meanwhile
-      renderPaid(net, retained, secs, tx.hash);
+      renderPaid(sol, rcpt, ((performance.now() - t0) / 1000).toFixed(1), tx.hash);
     } catch (e) {
-      btn.disabled = false;
-      view().querySelectorAll(".chip").forEach((c) => { c.disabled = false; });
-      btn.textContent = t("payBtn", { x: "S/ " + amount.toFixed(2) });
-      note.textContent = friendlyError(e);
+      overlay(null);
+      if (note) note.textContent = friendlyError(e);
     }
   }
 
-  function renderPaid(net, retained, secs, hash) {
+  function splitFromReceipt(rcpt, wei) {
+    let retained = 0n, net = wei;
+    for (const log of rcpt.logs) {
+      try {
+        const p = yafi.interface.parseLog(log);
+        if (p && p.name === "SaleProcessed") { retained = p.args.retained; net = p.args.netToMerchant; }
+      } catch (e) { /* other event */ }
+    }
+    return { retained, net };
+  }
+
+  function renderPaid(sol, rcpt, secs, hash) {
+    const { retained, net } = splitFromReceipt(rcpt, weiFromSoles(sol));
+    const when = new Date().toLocaleString(lang === "es" ? "es-PE" : "en-US", { dateStyle: "medium", timeStyle: "short" });
+    const opNum = hash.slice(2, 10).toUpperCase(); // short, human operation number
     view().innerHTML = `
-      <section class="card done">
-        <div class="check">✓</div>
+      <section class="receipt">
+        <svg class="check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-15"/></svg>
         <h2>${t("paidTitle")}</h2>
-        <p>${retained > 0n
-          ? t("paidDetail", { net: "<b>" + soles(net) + "</b>", ret: "<b class='grad-text'>" + soles(retained) + "</b>" })
-          : t("paidAll", { net: "<b>" + soles(net) + "</b>" })}</p>
+        <div class="receipt-amount">${fmtSol(sol)}</div>
+        ${usdRef(sol) ? `<div class="muted small">${usdRef(sol)}</div>` : ""}
+        <p class="muted">${t("paidTo")} <b>${t("shopName")}</b></p>
+        <div class="receipt-rows">
+          <div class="row"><span>${t("rosaGets")}</span><b>${soles(net)}</b></div>
+          <div class="row loan"><span>${t("loanGets")}</span><b>${soles(retained)}</b></div>
+          <div class="row"><span>${t("opNumber")}</span><b>${opNum}</b></div>
+          <div class="row"><span>${t("date")}</span><b>${esc(when)}</b></div>
+        </div>
         <p><span class="badge">⚡ ${t("paidTime", { s: secs })}</span></p>
         <p class="small"><a href="${CFG.explorer}/tx/${hash}" target="_blank" rel="noopener">${t("receipt")}</a></p>
       </section>
@@ -459,26 +567,27 @@
     document.getElementById("againBtn").addEventListener("click", renderPay);
   }
 
+  // Shown only when no automatic test balance is available (no sponsor configured).
   function renderNeedFunds() {
     const addr = getCustomer().address;
     view().innerHTML = `
-      <p><a href="#/">${t("back")}</a></p>
-      <section class="card">
+      <div class="pay-top"><a href="#/" class="back">${t("back")}</a></div>
+      <section class="card center">
+        <div class="big-ico">🎟️</div>
         <h2>${t("needFunds")}</h2>
         <p class="muted">${t("needFundsHelp")}</p>
-        <p class="mono">${addr}</p>
-        <button class="btn btn-secondary" id="copyBtn" type="button">${t("copy")}</button>
+        <button class="btn btn-primary" id="copyBtn" type="button">${t("copy")}</button>
+        <button class="btn btn-secondary" id="againBtn" type="button">${t("payAgain")}</button>
       </section>
-      <button class="btn btn-primary" id="againBtn" type="button">${t("payAgain")}</button>
-      <details class="card" style="margin-top:14px">
+      <details class="card">
         <summary class="muted small">${t("orWallet")}</summary>
-        <button class="btn btn-secondary" id="walletBtn" type="button" style="margin-top:12px">${t("payWallet", { x: "S/ " + amount.toFixed(2) })}</button>
+        <button class="btn btn-secondary" id="walletBtn" type="button" style="margin-top:12px">${t("payWallet", { x: fmtSol(amountNum()) })}</button>
         <p class="muted small" id="walletNote"></p>
       </details>`;
     document.getElementById("againBtn").addEventListener("click", renderPay);
     document.getElementById("walletBtn").addEventListener("click", payWithWallet);
     document.getElementById("copyBtn").addEventListener("click", async (ev) => {
-      try { await navigator.clipboard.writeText(addr); ev.target.textContent = t("copied"); } catch (e) { /* no clipboard */ }
+      try { await navigator.clipboard.writeText(addr); ev.target.textContent = t("copied"); } catch (e) { toast(addr); }
     });
   }
 
@@ -486,26 +595,18 @@
   async function payWithWallet() {
     const btn = document.getElementById("walletBtn");
     const note = document.getElementById("walletNote");
+    const sol = amountNum();
     btn.disabled = true;
     btn.innerHTML = `<span class="spinner"></span>${t("paying")}`;
     try {
       const signer = await connectWallet();
-      const wei = weiFromSoles(amount);
       const t0 = performance.now();
-      const tx = await yafi.connect(signer).processSale(CFG.merchant, { value: wei });
+      const tx = await yafi.connect(signer).processSale(CFG.merchant, { value: weiFromSoles(sol) });
       const rcpt = await provider.waitForTransaction(tx.hash);
-      const secs = ((performance.now() - t0) / 1000).toFixed(1);
-      let retained = 0n, net = wei;
-      for (const log of rcpt.logs) {
-        try {
-          const p = yafi.interface.parseLog(log);
-          if (p && p.name === "SaleProcessed") { retained = p.args.retained; net = p.args.netToMerchant; }
-        } catch (e) { /* other event */ }
-      }
-      renderPaid(net, retained, secs, tx.hash);
+      renderPaid(sol, rcpt, ((performance.now() - t0) / 1000).toFixed(1), tx.hash);
     } catch (e) {
       btn.disabled = false;
-      btn.textContent = t("payWallet", { x: "S/ " + amount.toFixed(2) });
+      btn.textContent = t("payWallet", { x: fmtSol(sol) });
       note.textContent = friendlyError(e);
     }
   }
