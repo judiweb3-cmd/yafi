@@ -105,7 +105,7 @@
       newSale: "¡Nueva venta!",
       soundOn: "🔔 Activar sonido de ventas",
       soundReady: "🔔 Sonido activado",
-      voicePaid: "¡Listo! Pagaste con Yafi.", voiceSale: "Yafi. Recibiste {x}.",
+      voicePaid: "¡Listo! ¡Pagaste con Yafi!", voiceSale: "¡Yafiii! ¡Recibiste {x}!",
       sessionTotal: "Recibiste en esta sesión",
       salesN: "{n} ventas",
       verified: "Comercio verificado",
@@ -196,7 +196,7 @@
       newSale: "New sale!",
       soundOn: "🔔 Turn on sale sounds",
       soundReady: "🔔 Sounds on",
-      voicePaid: "Done! You paid with Yafi.", voiceSale: "Yafi. You received {x}.",
+      voicePaid: "Done! You paid with Yafi!", voiceSale: "Yafiii! You received {x}!",
       sessionTotal: "Received this session",
       salesN: "{n} sales",
       verified: "Verified merchant",
@@ -730,14 +730,26 @@
       playYafiChime(0.3);
     } catch (e) { /* audio not available */ }
   }
+  // The phone's own voice. Pick its most natural one (Google and "natural" voices sound far less
+  // robotic than the defaults) and speak a little higher and faster, the way people sound when
+  // money arrives.
+  function pickVoice() {
+    const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+    const mine = voices.filter((x) => x.lang && x.lang.toLowerCase().startsWith(lang));
+    const rank = (x) => (/natural|neural|online/i.test(x.name) ? 0 : /google/i.test(x.name) ? 1 : /es-(pe|mx|us|419)/i.test(x.lang) ? 2 : 3);
+    return mine.sort((a, b) => rank(a) - rank(b))[0] || null;
+  }
+  if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); // voices load late on Android
   function say(text, delayMs) {
     if (!sound.ctx || !window.speechSynthesis) return;
     setTimeout(() => {
       try {
         const u = new SpeechSynthesisUtterance(text);
         u.lang = lang === "es" ? "es-PE" : "en-US";
-        const v = speechSynthesis.getVoices().find((x) => x.lang && x.lang.toLowerCase().startsWith(lang));
-        if (v) u.voice = v;
+        const v = pickVoice();
+        if (v) { u.voice = v; u.lang = v.lang; }
+        u.pitch = 1.35;
+        u.rate = 1.1;
         speechSynthesis.cancel();
         speechSynthesis.speak(u);
       } catch (e) { /* no speech support */ }
