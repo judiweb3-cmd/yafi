@@ -889,10 +889,10 @@
       catch (e) { toast(friendlyError(e)); }
       finally { b.disabled = false; b.textContent = label; }
     };
-    document.getElementById("grantBtn").addEventListener("click", () => run("grantBtn", () => {
+    document.getElementById("grantBtn").addEventListener("click", () => run("grantBtn", async () => {
       const sol = Number(document.getElementById("gAmt").value);
       const bps = Math.round(Number(document.getElementById("gRet").value) * 100);
-      if (!v2Known) return yafiV1.connect(adminSigner).grantCredit(CFG.merchant, weiFromSoles(sol), bps);
+      if (!(await isV2())) return yafiV1.connect(adminSigner).grantCredit(CFG.merchant, weiFromSoles(sol), bps);
       // The contract takes a simple annual rate; the panel asks for a monthly one, as lenders quote it
       const rateBps = Math.round(Number(document.getElementById("gRate").value) * 12 * 100);
       return yafi.connect(adminSigner).grantCredit(CFG.merchant, weiFromSoles(sol), bps, rateBps);

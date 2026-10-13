@@ -33,8 +33,9 @@ export default {
     const provider = new ethers.JsonRpcProvider(env.RPC_URL, Number(env.CHAIN_ID || CHAIN_ID), { staticNetwork: true });
     const amount = ethers.parseEther(env.STARTER_MON || "0.1");
     try {
-      // Only top up accounts that are nearly empty, so one visitor cannot drain the sponsor
-      if ((await provider.getBalance(address)) >= amount / 2n) return json({ ok: true, funded: false }, 200, cors);
+      // Only top up accounts below one starter amount, so one visitor cannot drain the sponsor.
+      // The app asks for help only when a payment plus gas (at most 0.08) does not fit.
+      if ((await provider.getBalance(address)) >= amount) return json({ ok: true, funded: false }, 200, cors);
       const wallet = new ethers.Wallet(env.SPONSOR_KEY, provider);
       const tx = await wallet.sendTransaction({ to: address, value: amount });
       return json({ ok: true, funded: true, tx: tx.hash }, 200, cors);
