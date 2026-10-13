@@ -17,13 +17,16 @@ pragma solidity ^0.8.24;
 ///         detected on chain, so the ladder is an upper bound and the lender still approves
 ///         every loan.
 ///      3. Minimum sale: dust sales cannot inflate the sales count.
-///      4. Interest on the outstanding balance: simple annual rate, accrued per second, so
-///         every repayment (sale or prepayment) also lowers the interest that follows.
+///      4. Simple interest on the outstanding principal: annual rate, accrued per second and
+///         never charged on interest, so how often the contract is touched does not change the
+///         cost. Every repayment pays interest first, then principal, and lowers the interest
+///         that follows. No interest runs while the lender keeps the merchant frozen.
 ///      Plus lender tools: write-off of unrecoverable loans, emergency pause, freezing,
 ///      timestamps for days-without-repayment alerts, and two-step ownership transfer.
 contract YafiCreditEscrowV2 {
     struct Merchant {
-        uint256 creditBalance;   // Outstanding debt (principal + interest) as of lastAccrualAt
+        uint256 creditBalance;   // Outstanding principal of the current loan
+        uint256 accruedInterest; // Interest charged and not yet paid, as of lastAccrualAt
         uint256 currentLoan;     // Principal of the current (or last) loan
         uint256 creditLine;      // Line earned on the ladder
         uint256 loanInterest;    // Interest charged on the current loan
@@ -37,12 +40,12 @@ contract YafiCreditEscrowV2 {
         uint64 loanId;           // Id of the current (or last) loan
         uint40 loanGrantedAt;    // When the current loan was disbursed
         uint40 lastRepaymentAt;  // Last sale retention or prepayment (days-without-repayment alerts)
-        uint40 lastAccrualAt;    // Last time interest was added to creditBalance
+        uint40 lastAccrualAt;    // Interest is charged on the principal from this time on
         uint32 loansRepaid;      // Loans fully repaid (step on the credit ladder)
         uint32 loansWrittenOff;  // Loans written off as unrecoverable
         uint16 retentionBps;     // Retention per sale in basis points: 1000 = 10%
         uint16 annualRateBps;    // Simple annual interest rate in basis points: 4000 = 40%
-        bool frozen;             // Lender froze the merchant: no retention, no new loans
+        bool frozen;             // Lender froze the merchant: no retention, no interest, no new loans
     }
 
     uint16 public constant MAX_RETENTION_BPS = 3000;  // 30% cap
@@ -138,7 +141,7 @@ contract YafiCreditEscrowV2 {
     /// @notice Debt right now, including interest accrued since the last update.
     function currentDebt(address merchant) public view returns (uint256) {
         Merchant storage m = merchants[merchant];
-        return m.creditBalance + _pendingInterest(m);
+        return m.creditBalance + m.accruedInterest + _pendingInterest(m);
     }
 
     /// @notice Largest loan this merchant can receive now (credit ladder).
@@ -158,7 +161,7 @@ contract YafiCreditEscrowV2 {
         Merchant storage m = merchants[merchant];
         if (!m.frozen && m.creditBalance > 0) {
             retained = (amount * m.retentionBps) / BPS_BASE;
-            uint256 debt = m.creditBalance + _pendingInterest(m);
+            uint256 debt = m.creditBalance + m.accruedInterest + _pendingInterest(m);
             if (retained > debt) retained = debt;
         }
         netToMerchant = amount - retained;
@@ -167,7 +170,7 @@ contract YafiCreditEscrowV2 {
     /// @notice Repayment progress of the current loan (principal + interest), in basis points.
     function repaymentProgressBps(address merchant) external view returns (uint256) {
         Merchant storage m = merchants[merchant];
-        uint256 total = m.loanRepaid + m.creditBalance + _pendingInterest(m);
+        uint256 total = m.loanRepaid + m.creditBalance + m.accruedInterest + _pendingInterest(m);
         if (total == 0) return 0;
         return (m.loanRepaid * BPS_BASE) / total;
     }
@@ -200,6 +203,7 @@ contract YafiCreditEscrowV2 {
 
         uint64 id = ++loanCount;
         m.creditBalance = amount;
+        m.accruedInterest = 0;
         m.currentLoan = amount;
         m.loanInterest = 0;
         m.loanRepaid = 0;
@@ -231,7 +235,8 @@ contract YafiCreditEscrowV2 {
         if (!m.frozen && m.creditBalance > 0) {
             _accrue(m);
             retained = (msg.value * m.retentionBps) / BPS_BASE;
-            if (retained > m.creditBalance) retained = m.creditBalance;
+            uint256 debt = m.creditBalance + m.accruedInterest;
+            if (retained > debt) retained = debt;
             m.repaidFromSales += retained;
             _applyRepayment(merchant, m, retained);
         }
@@ -254,9 +259,10 @@ contract YafiCreditEscrowV2 {
         if (m.creditBalance == 0) revert NoOutstandingLoan();
 
         _accrue(m);
-        uint256 applied = msg.value > m.creditBalance ? m.creditBalance : msg.value;
+        uint256 debt = m.creditBalance + m.accruedInterest;
+        uint256 applied = msg.value > debt ? debt : msg.value;
         _applyRepayment(msg.sender, m, applied);
-        emit DirectRepayment(msg.sender, m.loanId, applied, m.creditBalance);
+        emit DirectRepayment(msg.sender, m.loanId, applied, m.creditBalance + m.accruedInterest);
 
         uint256 refund = msg.value - applied;
         if (refund > 0) {
@@ -273,18 +279,21 @@ contract YafiCreditEscrowV2 {
         Merchant storage m = merchants[merchant];
         if (m.creditBalance == 0) revert NoOutstandingLoan();
         _accrue(m);
-        uint256 amount = m.creditBalance;
+        uint256 amount = m.creditBalance + m.accruedInterest;
         m.creditBalance = 0;
+        m.accruedInterest = 0;
         m.totalWrittenOff += amount;
         m.loansWrittenOff += 1;
         m.creditLine = 0;
         emit CreditWrittenOff(merchant, m.loanId, amount);
     }
 
-    /// @notice Freezing stops retention and new loans (e.g. during a dispute). Prepayments still work.
+    /// @notice Freezing stops retention, interest and new loans (e.g. during a dispute).
+    ///         Prepayments still work.
     function setMerchantFrozen(address merchant, bool frozen) external onlyOwner {
         Merchant storage m = merchants[merchant];
-        if (m.creditBalance > 0) _accrue(m);
+        _accrue(m);                                 // settle interest up to now (none while frozen)
+        m.lastAccrualAt = uint40(block.timestamp);  // the frozen period is never charged
         m.frozen = frozen;
         emit MerchantFrozenSet(merchant, frozen);
     }
@@ -346,24 +355,28 @@ contract YafiCreditEscrowV2 {
     // ---------------------------------------------------------------- internal
 
     function _pendingInterest(Merchant storage m) private view returns (uint256) {
-        if (m.creditBalance == 0 || m.annualRateBps == 0) return 0;
+        if (m.creditBalance == 0 || m.annualRateBps == 0 || m.frozen) return 0;
         uint256 elapsed = block.timestamp - m.lastAccrualAt;
         return (m.creditBalance * m.annualRateBps * elapsed) / (uint256(BPS_BASE) * YEAR);
     }
 
     function _accrue(Merchant storage m) private {
         uint256 interest = _pendingInterest(m);
+        // Only move the clock when interest was charged, so frequent calls cannot round it away.
         if (interest > 0) {
-            m.creditBalance += interest;
+            m.accruedInterest += interest;
             m.loanInterest += interest;
             m.totalInterest += interest;
+            m.lastAccrualAt = uint40(block.timestamp);
         }
-        m.lastAccrualAt = uint40(block.timestamp);
     }
 
     function _applyRepayment(address merchant, Merchant storage m, uint256 amount) private {
         if (amount == 0) return;
-        m.creditBalance -= amount;
+        // Interest first, then principal. Interest is never added to the principal.
+        uint256 toInterest = amount < m.accruedInterest ? amount : m.accruedInterest;
+        m.accruedInterest -= toInterest;
+        m.creditBalance -= amount - toInterest;
         m.loanRepaid += amount;
         m.totalRepaid += amount;
         m.lastRepaymentAt = uint40(block.timestamp);

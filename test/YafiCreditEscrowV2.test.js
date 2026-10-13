@@ -5,7 +5,7 @@ const E = ethers.parseEther;
 const FIRST_CAP = E("0.5");  // S/ 500 at the demo rate
 const MAX_CAP = E("5");      // S/ 5,000
 const MIN_SALE = E("0.001"); // S/ 1
-const MAX_RATE = 7500;       // 75% a year, simple (about 6.25% a month)
+const MAX_RATE = 7500;       // 75% a year, simple interest on the principal (6.25% a month)
 const YEAR = 365 * 24 * 60 * 60;
 
 describe("YafiCreditEscrowV2", function () {
@@ -20,7 +20,7 @@ describe("YafiCreditEscrowV2", function () {
   const m = (addr) => yafi.getMerchant(addr || merchant.address);
   const sale = (value) => yafi.connect(customer).processSale(merchant.address, { value });
   async function repayBySales(amount) {
-    while ((await m()).creditBalance > 0n) await sale(amount);
+    while ((await yafi.currentDebt(merchant.address)) > 0n) await sale(amount);
   }
   async function wait(seconds) {
     await network.provider.send("evm_increaseTime", [seconds]);
@@ -211,6 +211,35 @@ describe("YafiCreditEscrowV2", function () {
       await wait(YEAR);
       const [retained] = await yafi.previewSale(merchant.address, E("1"));
       expect(retained).to.be.closeTo(E("0.014"), E("0.00001")); // debt 0.01 + 40%
+    });
+
+    it("charges interest on the principal only, however often the contract is touched", async function () {
+      // Two identical loans; one gets a tiny sale (with tiny retention) every month, the other is left alone
+      await yafi.grantCredit(merchant.address, E("0.4"), 1, MAX_RATE);
+      await yafi.grantCredit(stranger.address, E("0.4"), 1, MAX_RATE);
+      for (let i = 0; i < 12; i++) {
+        await wait(YEAR / 12);
+        await sale(MIN_SALE);
+      }
+      // Simple interest: 0.4 * 75% = 0.3 a year on each, never interest on interest
+      expect(await yafi.currentDebt(stranger.address)).to.be.closeTo(E("0.7"), E("0.0001"));
+      const r = await m();
+      expect(r.loanInterest).to.be.closeTo(E("0.3"), E("0.0001"));
+      expect(r.creditBalance).to.equal(E("0.4"));                // retention went to interest first
+      expect(r.accruedInterest).to.equal(r.loanInterest - r.loanRepaid);
+    });
+
+    it("no interest runs while the merchant is frozen", async function () {
+      await yafi.grantCredit(merchant.address, E("0.4"), 1000, 4000);
+      await wait(YEAR / 4);
+      await yafi.setMerchantFrozen(merchant.address, true);
+      const atFreeze = await yafi.currentDebt(merchant.address);
+      await wait(YEAR / 4);
+      expect(await yafi.currentDebt(merchant.address)).to.equal(atFreeze);
+      await yafi.setMerchantFrozen(merchant.address, false);
+      await wait(YEAR / 4);
+      // Charged for two quarters, not three: 0.4 + 0.4 * 40% / 2
+      expect(await yafi.currentDebt(merchant.address)).to.be.closeTo(E("0.48"), E("0.0001"));
     });
   });
 
