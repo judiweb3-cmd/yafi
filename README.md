@@ -34,7 +34,7 @@ Three rules that microfinance lenders apply by hand are written into `YafiCredit
 | Rule | What the contract does | Why lenders use it |
 |---|---|---|
 | **Credit ladder** | The first loan is capped (demo: S/ 500). A new loan is only possible once the current one is fully repaid, and it can be at most 150% of the last one. | Small first loans limit the loss on an unknown borrower; the line grows only with proven repayment. |
-| **No self-payment** | A merchant cannot pay their own QR. | Stops a borrower from cycling their own money to fake a sales history. |
+| **No self-payment** | A merchant cannot pay their own QR. They can still prepay directly (for example with cash sales) with `repay()`: that lowers the debt and counts as repayment, but not as a sale. | Stops a borrower from cycling their own money to fake a sales history. |
 | **Minimum sale** | Sales below a minimum (demo: S/ 1) are rejected. | Stops dust payments from inflating the sales count used as behavioural history. |
 
 The 150% step and the demo limits are illustrative prototype parameters, not figures taken from a regulator. The cap and the minimum are set at deployment and can be changed by the owner with `setLimits`.

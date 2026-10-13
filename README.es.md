@@ -34,7 +34,7 @@ Tres reglas que las microfinancieras aplican a mano están escritas en `YafiCred
 | Regla | Qué hace el contrato | Por qué la usan los prestamistas |
 |---|---|---|
 | **Escalera de crédito** | El primer préstamo tiene tope (demo: S/ 500). Solo se puede dar uno nuevo cuando el actual está pagado por completo, y como máximo por el 150% del anterior. | Un primer préstamo pequeño limita la pérdida con un cliente nuevo; la línea crece solo con pagos demostrados. |
-| **Sin autopago** | Un comerciante no puede pagar su propio QR. | Evita que alguien haga circular su propio dinero para fingir un historial de ventas. |
+| **Sin autopago** | Un comerciante no puede pagar su propio QR. Sí puede hacer un pago adelantado (por ejemplo, con ventas en efectivo) con `repay()`: eso baja la deuda y cuenta como pago, pero no como venta. | Evita que alguien haga circular su propio dinero para fingir un historial de ventas. |
 | **Venta mínima** | Se rechazan ventas por debajo de un mínimo (demo: S/ 1). | Evita que pagos diminutos inflen el número de ventas que se usa como historial. |
 
 El paso de 150% y los límites de la demo son parámetros ilustrativos del prototipo, no cifras de un regulador. El tope y el mínimo se fijan al desplegar y el administrador puede cambiarlos con `setLimits`.
