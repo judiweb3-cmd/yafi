@@ -85,7 +85,7 @@
       how1: "Rosa vende desayunos en Piura y recibe un préstamo de YAFI.",
       how2: "Cada cliente le paga con el celular, como siempre.",
       how3: "Un % pactado de cada venta paga el préstamo. El resto le llega a Rosa al instante.",
-      asCustomer: "Pagar a Rosa", asCustomerSub: "Prueba como cliente",
+      asCustomer: "Pagar a Rosa", asCustomerSub: "Escanea su QR y paga",
       asMerchant: "Ver como Rosa", asMerchantSub: "Prueba como comerciante",
       shopName: "Desayunos Rosa", shopSub: "Carrito de desayunos · Piura",
       payTitle: "¿Cuánto vas a pagar?",
@@ -93,6 +93,12 @@
       noLoan: "Rosa no tiene préstamo activo: recibe el 100%.",
       payBtn: "Pagar {x}",
       payTo: "Pagar a",
+      scanTitle: "Escanea el QR del comercio",
+      scanDemo: "Demo: simulamos el escaneo del QR de Rosa.",
+      scanFound: "QR detectado",
+      newSale: "¡Nueva venta!",
+      sessionTotal: "Recibiste en esta sesión",
+      salesN: "{n} ventas",
       verified: "Comercio verificado",
       erase: "Borrar",
       range: "Monto entre {min} y {max}.",
@@ -165,7 +171,7 @@
       how1: "Rosa sells breakfast in Piura, Peru, and gets a loan from YAFI.",
       how2: "Each customer pays her by phone, as usual.",
       how3: "An agreed % of every sale repays the loan. The rest reaches Rosa instantly.",
-      asCustomer: "Pay Rosa", asCustomerSub: "Try it as a customer",
+      asCustomer: "Pay Rosa", asCustomerSub: "Scan her QR and pay",
       asMerchant: "See it as Rosa", asMerchantSub: "Try it as the merchant",
       shopName: "Rosa's Breakfast", shopSub: "Breakfast cart · Piura, Peru",
       payTitle: "How much are you paying?",
@@ -173,6 +179,12 @@
       noLoan: "Rosa has no active loan: she receives 100%.",
       payBtn: "Pay {x}",
       payTo: "Pay to",
+      scanTitle: "Scan the merchant's QR",
+      scanDemo: "Demo: we simulate scanning Rosa's QR code.",
+      scanFound: "QR found",
+      newSale: "New sale!",
+      sessionTotal: "Received this session",
+      salesN: "{n} sales",
       verified: "Verified merchant",
       erase: "Delete",
       range: "Amount between {min} and {max}.",
@@ -376,7 +388,7 @@
   // ---------- Views ----------
   const view = () => document.getElementById("view");
   let timers = [];
-  function clearTimers() { timers.forEach(clearInterval); timers = []; }
+  function clearTimers() { timers.forEach((id) => { clearInterval(id); clearTimeout(id); }); timers = []; }
 
   function renderHome() {
     view().innerHTML = `
@@ -384,7 +396,7 @@
         <h1><span class="grad-text">${t("heroTitle")}</span></h1>
         <p class="slogan">${t("heroSlogan")}</p>
         <p class="lead">${t("heroLead")}</p>
-        <a class="btn btn-primary role-btn" href="#/pagar"><span class="ico">📱</span><span>${t("asCustomer")}<small>${t("asCustomerSub")}</small></span></a>
+        <a class="btn btn-primary role-btn" href="#/escanear"><span class="ico">📱</span><span>${t("asCustomer")}<small>${t("asCustomerSub")}</small></span></a>
         <a class="btn btn-secondary role-btn" href="#/rosa"><span class="ico">🥪</span><span>${t("asMerchant")}<small>${t("asMerchantSub")}</small></span></a>
       </section>
       <section class="card">
@@ -397,12 +409,39 @@
       </section>`;
   }
 
+  // Simulated QR scan, so the demo follows the same steps as a real mobile-wallet payment
+  function renderScan() {
+    if (!configured) return notConfigured();
+    let cells = "";
+    for (let i = 0; i < 81; i++) {
+      const x = i % 9, y = Math.floor(i / 9);
+      const finder = (x < 3 && y < 3) || (x > 5 && y < 3) || (x < 3 && y > 5);
+      if (finder || (i * 7 + 3) % 5 < 2) cells += `<rect x="${x * 10}" y="${y * 10}" width="9" height="9" rx="2"/>`;
+    }
+    view().innerHTML = `
+      <div class="pay-top"><a href="#/" class="back">${t("back")}</a></div>
+      <h2 class="center">${t("scanTitle")}</h2>
+      <div class="scanner">
+        <svg viewBox="0 0 90 90" class="qr" aria-hidden="true">${cells}</svg>
+        <div class="scan-line"></div>
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+      </div>
+      <p class="muted small center" id="scanNote">${t("scanDemo")}</p>`;
+    timers.push(setTimeout(() => {
+      const n = document.getElementById("scanNote");
+      if (!n) return;
+      if (navigator.vibrate) navigator.vibrate(60);
+      n.innerHTML = `<span class="badge">✓ ${t("scanFound")}: ${t("shopName")}</span>`;
+      timers.push(setTimeout(() => { if (currentRoute() === "escanear") location.hash = "#/pagar"; }, 700));
+    }, 1600));
+  }
+
   function merchantHeader() {
     return `<div class="merchant-head"><div class="avatar">🥪</div><div><div class="name">${t("shopName")}</div><div class="sub">${t("shopSub")}</div></div></div>`;
   }
 
   function notConfigured() {
-    view().innerHTML = `<p><a href="#/">${t("back")}</a></p><div class="card">${t("notConfigured")}</div>`;
+    view().innerHTML = `<div class="pay-top"><a href="#/" class="back">${t("back")}</a></div><div class="card">${t("notConfigured")}</div>`;
   }
 
   // Customer: a payment screen modelled on the mobile wallets people already use
@@ -618,19 +657,45 @@
   const seen = new Set();
   let feedItems = [];
   let fromBlock = null;
+  let feedPrimed = false; // no alert for sales already on chain when the view opens
+
+  // Celebrate each new sale the way payment apps do: banner, short vibration and a beep
+  function saleAlert(f) {
+    const el = document.getElementById("saleAlert");
+    if (!el) return;
+    el.innerHTML = `<b>${t("newSale")}</b><span>+${soles(f.amount - f.retained)}</span>`;
+    el.hidden = false;
+    el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+    clearTimeout(saleAlert._t);
+    saleAlert._t = setTimeout(() => { el.hidden = true; }, 3500);
+    if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+    try {
+      const ctx = saleAlert.ctx || (saleAlert.ctx = new (window.AudioContext || window.webkitAudioContext)());
+      [880, 1320].forEach((hz, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = hz; o.connect(g); g.connect(ctx.destination);
+        const t0 = ctx.currentTime + i * 0.12;
+        g.gain.setValueAtTime(0.15, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.2);
+        o.start(t0); o.stop(t0 + 0.22);
+      });
+    } catch (e) { /* audio not allowed until the user interacts */ }
+  }
 
   async function renderRosa() {
     if (!configured) return notConfigured();
     view().innerHTML = `
-      <p><a href="#/">${t("back")}</a></p>
+      <div class="pay-top"><a href="#/" class="back">${t("back")}</a></div>
       <section class="card hero">
         <div class="merchant-head"><div class="avatar">🥪</div><div><div class="name">${t("hello")}</div><div class="sub">${t("shopSub")}</div></div></div>
         <div id="loan" style="margin-top:18px"><span class="spinner"></span></div>
       </section>
       <section class="card">
+        <div class="session" id="session"></div>
         <h2>${t("liveSales")}</h2>
         <ul class="feed" id="feed"></ul>
-      </section>`;
+      </section>
+      <div class="sale-alert" id="saleAlert" hidden></div>`;
+    feedPrimed = false;
     renderFeed();
     await refreshLoan();
     await pollSales();
@@ -688,7 +753,11 @@
         added = true;
       }
       feedItems = feedItems.slice(0, 15);
-      if (added) renderFeed();
+      if (added) {
+        renderFeed();
+        if (feedPrimed) saleAlert(feedItems[0]);
+      }
+      feedPrimed = true;
     } catch (e) {
       console.warn("pollSales", e);
     }
@@ -697,10 +766,17 @@
   function renderFeed() {
     const el = document.getElementById("feed");
     if (!el) return;
+    const sess = document.getElementById("session");
+    if (sess) {
+      const total = feedItems.reduce((a, f) => a + (f.amount - f.retained), 0n);
+      sess.innerHTML = feedItems.length
+        ? `<span class="label">${t("sessionTotal")}</span><div class="session-total">${soles(total)}</div><span class="muted small">${t("salesN", { n: feedItems.length })}</span>`
+        : "";
+    }
     if (!feedItems.length) { el.innerHTML = `<li class="muted small">${t("waitingSales")}</li>`; return; }
     el.innerHTML = feedItems.map((f) => `
       <li class="${f.fresh ? "new" : ""}">
-        <span>${t("saleRow", { x: soles(f.amount) })}<br /><span class="loan">${t("saleLoan", { x: soles(f.retained) })}</span></span>
+        <span>${t("saleRow", { x: soles(f.amount) })} <span class="muted small">· ${new Date(f.at).toLocaleTimeString(lang === "es" ? "es-PE" : "en-US", { hour: "2-digit", minute: "2-digit" })}</span><br /><span class="loan">${t("saleLoan", { x: soles(f.retained) })}</span></span>
         <span class="amt">+${soles(f.amount - f.retained)}</span>
       </li>`).join("");
     feedItems.forEach((f) => { f.fresh = false; });
@@ -710,7 +786,7 @@
   let adminSigner = null;
   async function renderAdmin() {
     view().innerHTML = `
-      <p><a href="#/">${t("back")}</a></p>
+      <div class="pay-top"><a href="#/" class="back">${t("back")}</a></div>
       <section class="card">
         <h2>${t("adminTitle")}</h2>
         <p class="muted small">${t("adminLead")}</p>
@@ -777,6 +853,7 @@
     clearTimers();
     const h = location.hash.replace(/^#\/?/, "");
     if (h === "pagar") renderPay();
+    else if (h === "escanear") renderScan();
     else if (h === "rosa") renderRosa();
     else if (h === "admin") renderAdmin();
     else renderHome();
