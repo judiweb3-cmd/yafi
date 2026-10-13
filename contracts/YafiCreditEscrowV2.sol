@@ -8,10 +8,11 @@ pragma solidity ^0.8.24;
 ///         merchant's microloan and the rest is paid to the merchant instantly.
 /// @dev V2 adds three risk controls taken from traditional microfinance, enforced by code:
 ///      1. Credit ladder: a first loan is capped, and a new loan is only possible after the
-///         previous one is fully repaid, up to 150% of it.
+///         previous one is fully repaid. The line only grows with what was repaid through
+///         sales: next limit = last loan + 50% of the part repaid through sales (up to 150%).
 ///      2. No self-payment: a merchant cannot pay their own sales to inflate their history.
-///         They can still repay directly with `repay()` (e.g. from cash sales); that lowers
-///         the debt and counts as repayment, but never as a sale.
+///         They can still prepay directly with `repay()` (e.g. from cash sales); that lowers
+///         the debt and counts as repayment, but never as a sale and never grows the line.
 ///      3. Minimum sale: dust sales cannot inflate the sales count.
 contract YafiCreditEscrowV2 {
     struct Merchant {
@@ -19,6 +20,7 @@ contract YafiCreditEscrowV2 {
         uint256 currentLoan;   // Principal of the current (or last) loan
         uint256 totalGranted;  // Total disbursed over time
         uint256 totalRepaid;   // Total repaid over time (behavioral score input)
+        uint256 repaidFromSales; // Part of the current loan repaid through sales (drives the ladder)
         uint256 salesCount;    // Sales processed through YAFI
         uint32 loansRepaid;    // Loans fully repaid (step on the credit ladder)
         uint16 retentionBps;   // Retention per sale in basis points: 1000 = 10%
@@ -26,7 +28,7 @@ contract YafiCreditEscrowV2 {
     }
 
     uint16 public constant MAX_RETENTION_BPS = 3000; // 30% cap
-    uint16 public constant LADDER_STEP_BPS = 15000;  // Next loan up to 150% of the last one
+    uint16 public constant LADDER_GROWTH_BPS = 5000; // Line grows by 50% of what sales repaid
     uint16 private constant BPS_BASE = 10000;
 
     address public owner;         // Lender / administrator
@@ -98,7 +100,8 @@ contract YafiCreditEscrowV2 {
         Merchant storage m = merchants[merchant];
         if (m.creditBalance > 0) return 0; // must finish the current loan first
         if (m.loansRepaid == 0) return firstLoanCap;
-        return (m.currentLoan * LADDER_STEP_BPS) / BPS_BASE;
+        // Prepayments close the loan but do not grow the line: only sales-backed repayment does
+        return m.currentLoan + (m.repaidFromSales * LADDER_GROWTH_BPS) / BPS_BASE;
     }
 
     function grantCredit(address merchant, uint256 amount, uint16 retentionBps)
@@ -118,6 +121,7 @@ contract YafiCreditEscrowV2 {
 
         m.creditBalance = amount;
         m.currentLoan = amount;
+        m.repaidFromSales = 0;
         m.totalGranted += amount;
         m.retentionBps = retentionBps;
         m.isActive = true;
@@ -144,6 +148,7 @@ contract YafiCreditEscrowV2 {
             }
             m.creditBalance -= retained;
             m.totalRepaid += retained;
+            m.repaidFromSales += retained;
             treasury += retained;
 
             if (m.creditBalance == 0) {
@@ -161,9 +166,9 @@ contract YafiCreditEscrowV2 {
         emit SaleProcessed(merchant, msg.sender, msg.value, retained, net);
     }
 
-    /// @notice The merchant repays their own loan directly, for example with cash sales.
-    ///         It lowers the debt and counts as repayment history, but not as a sale, so it
-    ///         cannot inflate the sales record. Any amount above the debt is returned.
+    /// @notice The merchant prepays their own loan directly, for example with cash sales.
+    ///         It lowers the debt and counts as repayment history, but not as a sale and not
+    ///         toward a bigger next loan. Any amount above the debt is returned.
     function repay() external payable nonReentrant {
         if (msg.value == 0) revert ZeroAmount();
         Merchant storage m = merchants[msg.sender];

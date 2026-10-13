@@ -19,7 +19,7 @@
   const ABI = [
     "function owner() view returns (address)",
     "function treasury() view returns (uint256)",
-    "function merchants(address) view returns (uint256 creditBalance, uint256 currentLoan, uint256 totalGranted, uint256 totalRepaid, uint256 salesCount, uint32 loansRepaid, uint16 retentionBps, bool isActive)",
+    "function merchants(address) view returns (uint256 creditBalance, uint256 currentLoan, uint256 totalGranted, uint256 totalRepaid, uint256 repaidFromSales, uint256 salesCount, uint32 loansRepaid, uint16 retentionBps, bool isActive)",
     "function creditLimit(address merchant) view returns (uint256)",
     "function firstLoanCap() view returns (uint256)",
     "function minSaleAmount() view returns (uint256)",

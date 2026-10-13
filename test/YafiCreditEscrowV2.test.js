@@ -60,7 +60,7 @@ describe("YafiCreditEscrowV2", function () {
         .to.be.revertedWithCustomError(yafi, "OutstandingLoan");
     });
 
-    it("allows up to 150% of the last loan after full repayment", async function () {
+    it("allows up to 150% of the last loan when sales repaid all of it", async function () {
       await yafi.grantCredit(merchant.address, E("0.2"), 3000);
       await repayFully(E("0.1"));
 
@@ -124,7 +124,17 @@ describe("YafiCreditEscrowV2", function () {
       expect(m.creditBalance).to.equal(0);
       expect(m.loansRepaid).to.equal(1);
       expect(m.salesCount).to.equal(0);
-      expect(await yafi.creditLimit(merchant.address)).to.equal(E("0.3"));
+      // Fully prepaid: the loan is closed but the line does not grow
+      expect(await yafi.creditLimit(merchant.address)).to.equal(E("0.2"));
+    });
+
+    it("grows the line only with the part repaid through sales", async function () {
+      await yafi.setRetention(merchant.address, 3000);
+      await yafi.connect(customer).processSale(merchant.address, { value: E("0.1") }); // 0.03 via sales
+      await yafi.connect(customer).processSale(merchant.address, { value: E("0.1") }); // 0.06 via sales
+      await yafi.connect(merchant).repay({ value: E("0.14") });                         // rest prepaid
+      expect((await yafi.merchants(merchant.address)).repaidFromSales).to.equal(E("0.06"));
+      expect(await yafi.creditLimit(merchant.address)).to.equal(E("0.23")); // 0.2 + 50% of 0.06
     });
 
     it("rejects a repayment with no loan or no value", async function () {

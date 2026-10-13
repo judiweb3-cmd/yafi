@@ -49,14 +49,14 @@ Todo el código de este repositorio se escribió durante el hackathon (octubre d
 |---|---|
 | `contracts/YafiCreditEscrowV2.sol` | Escrow que guarda la caja de préstamos, otorga créditos y divide cada venta entre el comerciante y el pago del préstamo, más los tres controles de riesgo de arriba. Retención en puntos básicos con tope de 30%, protección anti-reentrada, solo el administrador puede prestar y errores personalizados. |
 | `contracts/YafiCreditEscrow.sol` | La primera versión (v1), usada en la primera prueba en la cadena. Misma división, sin los controles de riesgo. |
-| `test/` | 34 pruebas en Hardhat: 21 para v2 (escalera, préstamo pendiente, autopago, venta mínima, avance por préstamo, división, nunca cobrar de más, líneas congeladas, controles del administrador) y 13 para v1. |
+| `test/` | 35 pruebas en Hardhat: 22 para v2 (escalera, préstamo pendiente, autopago, venta mínima, avance por préstamo, división, nunca cobrar de más, líneas congeladas, controles del administrador) y 13 para v1. |
 | `app/` | App web móvil (ES/EN). **Pagar a Rosa** (cliente), **Vista de Rosa** (saldo del préstamo, ventas en vivo leídas de los eventos del contrato y el tamaño de su próximo préstamo) y **panel de administración** (prestamista, con MetaMask, con la línea disponible para Rosa). La app detecta si el contrato es v1 o v2. |
 
 ### En vivo en Monad Testnet
 
 - Contrato: [`0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831`](https://testnet.monadexplorer.com/address/0x1e8902E1c942F1AF71b2A30548f354D1C9e2c831), desplegado con Remix (Solidity 0.8.34) con una caja de 5 MON.
 - Comerciante de la demo, "Rosa": [`0x44e0C28209F3c2735613b13c3813826A9eeC135D`](https://testnet.monadexplorer.com/address/0x44e0C28209F3c2735613b13c3813826A9eeC135D).
-- Este primer despliegue es el v1. El contrato v2 con los controles de riesgo está probado localmente (34 pruebas en verde) y lo reemplazará en Monad Testnet.
+- Este primer despliegue es el v1. El contrato v2 con los controles de riesgo está probado localmente (35 pruebas en verde) y lo reemplazará en Monad Testnet.
 - Prueba en la cadena: se le otorgó a Rosa un préstamo de 0.5 MON (S/ 500 al tipo de cambio de la demo), y luego una venta de S/ 10 dejó su deuda en S/ 499, con 1 venta registrada. Todas las transacciones se ven en la página del contrato en el explorador.
 
 ## Pruébalo (jueces)
@@ -106,7 +106,7 @@ Requisitos: Node.js 18+ y npm.
 git clone https://github.com/judiweb3-cmd/yafi
 cd yafi
 npm install
-npx hardhat test          # 34 pruebas en verde
+npx hardhat test          # 35 pruebas en verde
 ```
 
 Para desplegar tu propio contrato, para la app local y para la tabla de mensajes de error, ver las secciones correspondientes del [README en inglés](README.md#run-it-yourself).
