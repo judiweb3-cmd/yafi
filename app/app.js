@@ -740,18 +740,23 @@
     return mine.sort((a, b) => rank(a) - rank(b))[0] || null;
   }
   if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); // voices load late on Android
+  // Each exclamation is spoken on its own, the first one higher, so the line rises and falls
+  // like a happy voice instead of a flat robotic one.
   function say(text, delayMs) {
     if (!sound.ctx || !window.speechSynthesis) return;
     setTimeout(() => {
       try {
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = lang === "es" ? "es-PE" : "en-US";
-        const v = pickVoice();
-        if (v) { u.voice = v; u.lang = v.lang; }
-        u.pitch = 1.35;
-        u.rate = 1.1;
         speechSynthesis.cancel();
-        speechSynthesis.speak(u);
+        const v = pickVoice();
+        const parts = text.match(/[^!.]+[!.]?/g) || [text];
+        parts.map((p) => p.trim()).filter(Boolean).forEach((part, i) => {
+          const u = new SpeechSynthesisUtterance(part);
+          u.lang = v ? v.lang : (lang === "es" ? "es-PE" : "en-US");
+          if (v) u.voice = v;
+          u.pitch = i === 0 ? 1.6 : 1.3;
+          u.rate = i === 0 ? 1.2 : 1.3;
+          speechSynthesis.speak(u);
+        });
       } catch (e) { /* no speech support */ }
     }, delayMs);
   }
